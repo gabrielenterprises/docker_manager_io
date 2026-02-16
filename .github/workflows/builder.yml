@@ -2,22 +2,25 @@ name: Builder
 on:
   workflow_dispatch:
 
+# --------------------------------------------------------------
+# Permissions – GITHUB_TOKEN is automatically provided.
+# --------------------------------------------------------------
 permissions:
-  contents: read        # needed for checkout
-  packages: write       # required to push to GHCR
+  contents: read        # needed for actions/checkout
+  packages: write       # needed to push to GHCR
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       # --------------------------------------------------------------
-      # 1️⃣ Checkout the repo (Dockerfile + wrapper)
+      # 1️⃣ Checkout the repository (Dockerfile, wrapper, etc.)
       # --------------------------------------------------------------
       - name: Checkout Code
         uses: actions/checkout@v4
 
       # --------------------------------------------------------------
-      # 2️⃣ Log in to GHCR (only registry we use)
+      # 2️⃣ Log in to GitHub Container Registry (GHCR)
       # --------------------------------------------------------------
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
@@ -27,7 +30,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # --------------------------------------------------------------
-      # 3️⃣ Set up QEMU + Buildx for multi‑arch builds
+      # 3️⃣ Set up QEMU & Buildx for multi‑arch builds
       # --------------------------------------------------------------
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -54,33 +57,65 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # --------------------------------------------------------------
-      # 5️⃣ Supply‑chain hygiene – verify SHA‑256 checksum of the tarball
+      # 5️⃣ Supply‑chain hygiene – verify SHA‑256 from release notes,
+      #     selecting the hash that matches the exact tarball we download.
       # --------------------------------------------------------------
-      - name: Verify upstream tarball checksum
+      - name: Verify upstream tarball checksum (from release notes, file‑specific)
+        id: checksum
         run: |
-          # Determine platform for the tarball (same logic as Dockerfile)
-          if [ "${{ matrix.platform }}" = "linux/arm64" ]; then TARGET=arm64; else TARGET=x64; fi
+          # ----- 1️⃣ Determine target architecture (must match Dockerfile) -----
+          if [ "${{ matrix.platform }}" = "linux/arm64" ]; then
+            TARGET=arm64
+          else
+            TARGET=x64
+          fi
 
+          # ----- 2️⃣ Build URLs -------------------------------------------------
           TAR_URL="https://github.com/Manager-io/Manager/releases/download/${{ steps.tag.outputs.LATEST_RELEASE_TAG }}/ManagerServer-linux-${TARGET}.tar.gz"
-          CHECKSUM_URL="${TAR_URL}.sha256"
+          RELEASE_API="https://api.github.com/repos/Manager-io/Manager/releases/tags/${{ steps.tag.outputs.LATEST_RELEASE_TAG }}"
 
+          # ----- 3️⃣ Download the tarball ----------------------------------------
           echo "Downloading tarball ..."
           curl -L "$TAR_URL" -o /tmp/manager-server.tar.gz
 
-          echo "Downloading checksum ..."
-          curl -L "$CHECKSUM_URL" -o /tmp/manager-server.tar.gz.sha256
+          # ----- 4️⃣ Fetch the release notes (markdown body) --------------------
+          echo "Fetching release notes ..."
+          RELEASE_BODY=$(curl -s "$RELEASE_API" | jq -r '.body')
 
-          echo "Normalising checksum file ..."
-          # The checksum file contains the filename; replace it with the local name
-          sed -i "s|ManagerServer-linux-.*.tar.gz|manager-server.tar.gz|" /tmp/manager-server.tar.gz.sha256
+          # ----- 5️⃣ Extract the SHA‑256 that belongs to the exact filename -----
+          # Look for a line that contains the filename we are about to verify,
+          # then pull the first 64‑character hex string from that line.
+          EXPECTED_HASH=$(printf "%s" "$RELEASE_BODY" |
+            grep -i "ManagerServer-linux-${TARGET}.tar.gz" |
+            grep -Eo '[a-f0-9]{64}' |
+            head -n1)
 
-          echo "Verifying checksum ..."
-          sha256sum -c /tmp/manager-server.tar.gz.sha256
+          if [ -z "$EXPECTED_HASH" ]; then
+            echo "❌ Could NOT find a SHA‑256 hash for the file:"
+            echo "    ManagerServer-linux-${TARGET}.tar.gz"
+            echo "Release notes excerpt (first 300 characters):"
+            echo "${RELEASE_BODY:0:300}"
+            exit 1
+          fi
+
+          echo "✅ Extracted expected SHA‑256 for ${TARGET}: $EXPECTED_HASH"
+
+          # ----- 6️⃣ Compute the actual hash of the downloaded tarball ----------
+          ACTUAL_HASH=$(sha256sum /tmp/manager-server.tar.gz | awk '{print $1}')
+          echo "Actual SHA‑256 of downloaded tarball: $ACTUAL_HASH"
+
+          # ----- 7️⃣ Compare ----------------------------------------------------
+          if [ "$EXPECTED_HASH" != "$ACTUAL_HASH" ]; then
+            echo "❌ HASH MISMATCH – the tarball does NOT match the release note."
+            exit 1
+          fi
+
+          echo "✅ Hash matches – integrity verified."
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # --------------------------------------------------------------
-      # 6️⃣ Docker metadata (only GHCR)
+      # 6️⃣ Docker metadata (GHCR only)
       # --------------------------------------------------------------
       - name: Docker meta
         id: meta
