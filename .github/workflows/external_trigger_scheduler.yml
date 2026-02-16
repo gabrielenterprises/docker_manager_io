@@ -1,0 +1,43 @@
+name: External Trigger Scheduler
+on:
+  schedule:
+    - cron: "0 0 * * *"   # daily at 00:00 UTC
+  workflow_dispatch:
+
+jobs:
+  external-trigger-scheduler:
+    runs-on: ubuntu-latest
+    env:
+      REPO: ${{ github.repository }}
+    steps:
+      - name: Checkout code (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Loop through branches and dispatch external_trigger
+        run: |
+          printf "# External trigger scheduler for %s\n\n" "$REPO" >> $GITHUB_STEP_SUMMARY
+          printf "Detected branches:\n\n%s\n" "$(git for-each-ref --format='- %(refname:lstrip=3)' refs/remotes)" >> $GITHUB_STEP_SUMMARY
+
+          for branch in $(git for-each-ref --format='%(refname:lstrip=3)' refs/remotes); do
+            # Skip the symbolic HEAD reference
+            if [[ "$branch" == "HEAD" ]]; then
+              echo "Skipping HEAD branch." >> $GITHUB_STEP_SUMMARY
+              continue
+            fi
+
+            # Try to read vars.yml from the branch – it should contain `ls_branch: <branch>`
+            LS_BRANCH=$(curl -sSL "https://raw.githubusercontent.com/${REPO}/${branch}/vars.yml" | yq -r '.ls_branch // empty')
+
+            if [[ "$branch" == "$LS_BRANCH" ]]; then
+              echo "Branch $branch is marked as live (ls_branch matches). Dispatching external_trigger…" >> $GITHUB_STEP_SUMMARY
+              curl -X POST \
+                -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                -H "Accept: application/vnd.github.v3+json" \
+                -d "{\"ref\":\"refs/heads/${branch}\"}" \
+                "https://api.github.com/repos/${REPO}/actions/workflows/external_trigger.yml/dispatches"
+            else
+              echo "Branch $branch is not a live branch (ls_branch missing or different). Skipping." >> $GITHUB_STEP_SUMMARY
+            fi
+          done
