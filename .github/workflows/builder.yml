@@ -6,7 +6,7 @@ on:
 # Permissions – the automatically‑provided GITHUB_TOKEN is used.
 # --------------------------------------------------------------
 permissions:
-  contents: read        # needed for actions/checkout
+  contents: write        # needed for actions/checkout
   packages: write       # needed to push to GHCR
 
 jobs:
