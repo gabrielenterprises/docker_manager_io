@@ -1,0 +1,132 @@
+name: Builder
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read        # needed for checkout
+  packages: write       # required to push to GHCR
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # --------------------------------------------------------------
+      # 1️⃣ Checkout the repo (Dockerfile + wrapper)
+      # --------------------------------------------------------------
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # --------------------------------------------------------------
+      # 2️⃣ Log in to GHCR (only registry we use)
+      # --------------------------------------------------------------
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # --------------------------------------------------------------
+      # 3️⃣ Set up QEMU + Buildx for multi‑arch builds
+      # --------------------------------------------------------------
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          buildkitd-flags: --debug
+
+      # --------------------------------------------------------------
+      # 4️⃣ Determine the latest upstream Manager.io release tag
+      # --------------------------------------------------------------
+      - name: Get Latest Release Tag
+        id: tag
+        run: |
+          LATEST_RELEASE_TAG=$(curl -sL https://api.github.com/repos/Manager-io/Manager/releases/latest | jq -r '.tag_name')
+          echo "Latest Release Tag: $LATEST_RELEASE_TAG"
+          # Strip characters that are unsafe for Docker tags
+          RELEASE_TAG=$(echo "${LATEST_RELEASE_TAG}" | tr -d 'v~,%@+;:/ ')
+          echo "Sanitized Release Tag: $RELEASE_TAG"
+          echo "LATEST_RELEASE_TAG=$LATEST_RELEASE_TAG" >> $GITHUB_OUTPUT
+          echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_OUTPUT
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # --------------------------------------------------------------
+      # 5️⃣ Supply‑chain hygiene – verify SHA‑256 checksum of the tarball
+      # --------------------------------------------------------------
+      - name: Verify upstream tarball checksum
+        run: |
+          # Determine platform for the tarball (same logic as Dockerfile)
+          if [ "${{ matrix.platform }}" = "linux/arm64" ]; then TARGET=arm64; else TARGET=x64; fi
+
+          TAR_URL="https://github.com/Manager-io/Manager/releases/download/${{ steps.tag.outputs.LATEST_RELEASE_TAG }}/ManagerServer-linux-${TARGET}.tar.gz"
+          CHECKSUM_URL="${TAR_URL}.sha256"
+
+          echo "Downloading tarball ..."
+          curl -L "$TAR_URL" -o /tmp/manager-server.tar.gz
+
+          echo "Downloading checksum ..."
+          curl -L "$CHECKSUM_URL" -o /tmp/manager-server.tar.gz.sha256
+
+          echo "Normalising checksum file ..."
+          # The checksum file contains the filename; replace it with the local name
+          sed -i "s|ManagerServer-linux-.*.tar.gz|manager-server.tar.gz|" /tmp/manager-server.tar.gz.sha256
+
+          echo "Verifying checksum ..."
+          sha256sum -c /tmp/manager-server.tar.gz.sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # --------------------------------------------------------------
+      # 6️⃣ Docker metadata (only GHCR)
+      # --------------------------------------------------------------
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=pep440,pattern={{version}},value=${{ steps.tag.outputs.RELEASE_TAG }}
+            type=sha,prefix=sha-
+          labels: |
+            org.opencontainers.image.title=Manager.io
+            org.opencontainers.image.source=https://github.com/Manager-io/Manager
+            org.opencontainers.image.version=${{ steps.tag.outputs.RELEASE_TAG }}
+            org.opencontainers.image.licenses=GPL-3.0
+
+      # --------------------------------------------------------------
+      # 7️⃣ Build & push the Docker image (multi‑arch)
+      # --------------------------------------------------------------
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            MANAGER_VERSION=${{ steps.tag.outputs.LATEST_RELEASE_TAG }}
+
+      # --------------------------------------------------------------
+      # 8️⃣ Create a GitHub release mirroring the upstream version
+      # --------------------------------------------------------------
+      - name: Create GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: "v${{ steps.tag.outputs.RELEASE_TAG }}"
+          name: "Manager.io ${{ steps.tag.outputs.RELEASE_TAG }}"
+          body: |
+            Auto‑generated release – Docker image built from upstream Manager.io ${{ steps.tag.outputs.LATEST_RELEASE_TAG }}.
+
+            **SHA‑256 checksum verified** for the upstream tarball.
+
+            **Docker image:** `ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ steps.tag.outputs.RELEASE_TAG }}`
+
+          draft: false
+          prerelease: false
+          allowUpdates: true
