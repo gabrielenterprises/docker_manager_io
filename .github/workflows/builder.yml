@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
 
 # --------------------------------------------------------------
-# Permissions – GITHUB_TOKEN is automatically provided.
+# Permissions – the automatically‑provided GITHUB_TOKEN is used.
 # --------------------------------------------------------------
 permissions:
   contents: read        # needed for actions/checkout
@@ -83,18 +83,19 @@ jobs:
           RELEASE_BODY=$(curl -s "$RELEASE_API" | jq -r '.body')
 
           # ----- 5️⃣ Extract the SHA‑256 that belongs to the exact filename -----
-          # Look for a line that contains the filename we are about to verify,
-          # then pull the first 64‑character hex string from that line.
+          FILENAME="ManagerServer-linux-${TARGET}.tar.gz"
           EXPECTED_HASH=$(printf "%s" "$RELEASE_BODY" |
-            grep -i "ManagerServer-linux-${TARGET}.tar.gz" |
+            grep -i "$FILENAME" |
             grep -Eo '[a-f0-9]{64}' |
             head -n1)
 
           if [ -z "$EXPECTED_HASH" ]; then
             echo "❌ Could NOT find a SHA‑256 hash for the file:"
-            echo "    ManagerServer-linux-${TARGET}.tar.gz"
-            echo "Release notes excerpt (first 300 characters):"
-            echo "${RELEASE_BODY:0:300}"
+            echo "    $FILENAME"
+            echo "Release notes excerpt (first 500 characters):"
+            echo "${RELEASE_BODY:0:500}"
+            echo ""
+            echo "If the format of the release notes has changed, you may need to adjust the extraction regex."
             exit 1
           fi
 
