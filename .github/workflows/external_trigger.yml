@@ -1,0 +1,100 @@
+name: External Trigger
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read   # we only need to read the image manifest
+  # write permission is not needed because this workflow only *dispatches* Builder
+
+jobs:
+  external-trigger:
+    runs-on: ubuntu-latest
+    env:
+      REPO: ${{ github.repository }}
+      IMAGE_TAG: latest
+
+    steps:
+      # --------------------------------------------------------------
+      # 1️⃣ Retrieve the latest upstream Manager.io version
+      # --------------------------------------------------------------
+      - name: Retrieve External Version
+        id: extver
+        run: |
+          EXT_RELEASE=$(curl -sL https://api.github.com/repos/Manager-io/Manager/releases/latest | jq -r '.tag_name')
+          if [ -z "$EXT_RELEASE" ] || [ "$EXT_RELEASE" = "null" ]; then
+            echo "> [!WARNING]" >> $GITHUB_STEP_SUMMARY
+            echo "> Unable to fetch upstream version." >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+          echo "External version: $EXT_RELEASE" >> $GITHUB_STEP_SUMMARY
+          echo "EXT_RELEASE=$EXT_RELEASE" >> $GITHUB_ENV
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # --------------------------------------------------------------
+      # 2️⃣ Resolve the digest of the currently published GHCR image
+      # --------------------------------------------------------------
+      - name: Resolve GHCR image digest
+        id: digest
+        run: |
+          token=$(curl -s "https://ghcr.io/token?scope=repository:${REPO}:pull" | jq -r '.token')
+          manifest=$(curl -s \
+            -H "Accept: application/vnd.oci.image.index.v1+json" \
+            -H "Authorization: Bearer ${token}" \
+            "https://ghcr.io/v2/${REPO}/manifests/${IMAGE_TAG}")
+
+          # Multi‑arch manifests contain a `manifests` array; pick the amd64 entry
+          if jq -e '.manifests' <<< "$manifest" > /dev/null; then
+            digest=$(echo "$manifest" | jq -r '.manifests[] | select(.platform.architecture=="amd64") .digest')
+          else
+            digest=$(echo "$manifest" | jq -r '.config.digest')
+          fi
+
+          echo "digest=${digest}" >> $GITHUB_OUTPUT
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # --------------------------------------------------------------
+      # 3️⃣ Pull the image config and read the version label we set in Builder
+      # --------------------------------------------------------------
+      - name: Read image version label
+        id: imgver
+        run: |
+          token=$(curl -s "https://ghcr.io/token?scope=repository:${REPO}:pull" | jq -r '.token')
+          config=$(curl -s \
+            -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \
+            -H "Authorization: Bearer ${token}" \
+            "https://ghcr.io/v2/${REPO}/blobs/${{ steps.digest.outputs.digest }}")
+
+          # The label is stored under `org.opencontainers.image.version`
+          IMG_LABEL=$(echo "$config" | jq -r '.container_config.Labels["org.opencontainers.image.version"] // .config.Labels["org.opencontainers.image.version"] // empty')
+          if [ -z "$IMG_LABEL" ]; then
+            echo "⚠️ Could not read version label from the image." >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+          echo "image_version=$IMG_LABEL" >> $GITHUB_OUTPUT
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # --------------------------------------------------------------
+      # 4️⃣ Compare versions and, if they differ, dispatch Builder
+      # --------------------------------------------------------------
+      - name: Compare and possibly trigger Builder
+        run: |
+          if [ "${EXT_RELEASE}" = "${IMAGE_VERSION}" ]; then
+            echo "✅ Up‑to‑date: ${EXT_RELEASE} already published." >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+
+          echo "🚀 New upstream version ${EXT_RELEASE} (current image: ${IMAGE_VERSION}) – triggering Builder." >> $GITHUB_STEP_SUMMARY
+
+          curl -X POST \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            -d "{\"ref\":\"refs/heads/main\"}" \
+            "https://api.github.com/repos/${REPO}/actions/workflows/builder.yml/dispatches"
+        env:
+          EXT_RELEASE: ${{ env.EXT_RELEASE }}
+          IMAGE_VERSION: ${{ steps.imgver.outputs.image_version }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
