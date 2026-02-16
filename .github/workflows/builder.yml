@@ -3,11 +3,11 @@ on:
   workflow_dispatch:
 
 # --------------------------------------------------------------
-# Permissions – the automatically‑provided GITHUB_TOKEN is used.
+# Explicit permissions for the automatically‑provided GITHUB_TOKEN
 # --------------------------------------------------------------
 permissions:
-  contents: write        # needed for actions/checkout
-  packages: write       # needed to push to GHCR
+  contents: write        # required to create a GitHub release
+  packages: write        # required to push to GHCR
 
 jobs:
   build:
@@ -98,4 +98,10 @@ jobs:
           tag: "v${{ steps.tag.outputs.RELEASE_TAG }}"
           name: "Manager.io ${{ steps.tag.outputs.RELEASE_TAG }}"
           body: |
-            Auto‑generat
+            Auto‑generated release – Docker image built from upstream Manager.io ${{ steps.tag.outputs.LATEST_RELEASE_TAG }}.
+
+            **Docker image:** `ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ steps.tag.outputs.RELEASE_TAG }}`
+          draft: false
+          prerelease: false
+          allowUpdates: true
+          # No explicit token needed – it will use the GITHUB_TOKEN that now has `contents: write`
