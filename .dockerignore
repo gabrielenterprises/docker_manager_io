@@ -1,0 +1,16 @@
+# Exclude version‑control metadata
+.git
+.gitignore
+
+# Exclude CI artefacts
+.github/
+*.md
+Dockerfile
+.chromium-wrapper
+.dockerignore
+
+# Exclude local IDE/editor files
+*.swp
+*.swo
+.idea/
+.vscode/
