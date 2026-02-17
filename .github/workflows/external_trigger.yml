@@ -1,3 +1,16 @@
+# --------------------------------------------------------------
+# Version A – External Trigger workflow
+# --------------------------------------------------------------
+# This workflow:
+#   1️⃣ Retrieves the latest Manager.io release tag.
+#   2️⃣ Pulls the OCI manifest list for the `latest` tag from GHCR.
+#   3️⃣ Extracts the amd64 (or first) manifest digest.
+#   4️⃣ Pulls that architecture‑specific manifest (contains the config).
+#   5️⃣ Reads the standard OCI label `org.opencontainers.image.version`.
+#   6️⃣ Compares it to the upstream tag and dispatches the Builder
+#      workflow only when the versions differ.
+# --------------------------------------------------------------
+
 name: External Trigger
 on:
   workflow_dispatch:
@@ -48,6 +61,7 @@ jobs:
             echo "❌ Failed to obtain GHCR token" >> $GITHUB_STEP_SUMMARY
             exit 1
           fi
+          # Export the token so later steps can use it
           echo "token=$TOKEN" >> $GITHUB_OUTPUT
 
       # --------------------------------------------------------------
@@ -68,7 +82,7 @@ jobs:
             exit 1
           fi
 
-          # Store the raw JSON as a multiline output
+          # Store the raw JSON as a **multiline** output (required syntax)
           echo "list<<EOF" >> $GITHUB_OUTPUT
           echo "$LIST" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
@@ -108,7 +122,7 @@ jobs:
             -H "Accept: application/vnd.oci.image.manifest.v1+json" \
             "https://ghcr.io/v2/${REPO}/manifests/${{ steps.arch_digest.outputs.digest }}")
 
-          # Store as multiline output
+          # Store as multiline output (same technique as step 3)
           echo "manifest<<EOF" >> $GITHUB_OUTPUT
           echo "$MANIFEST" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
