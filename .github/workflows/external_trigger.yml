@@ -4,9 +4,9 @@ on:
 
 # --------------------------------------------------------------
 # Permissions needed:
-#   - contents: read   → fetch the upstream Manager.io release via the GitHub API
-#   - packages: read   → pull the image manifest from GHCR
-#   - actions: write   → dispatch the Builder workflow
+#   contents: read   → fetch upstream Manager.io release via GitHub API
+#   packages: read   → pull the image manifest from GHCR
+#   actions: write   → dispatch the Builder workflow
 # --------------------------------------------------------------
 permissions:
   contents: read
@@ -17,8 +17,8 @@ jobs:
   external-trigger:
     runs-on: ubuntu-latest
     env:
-      REPO: ${{ github.repository }}                # e.g. gabrielenterprises/docker_manager_io
-      IMAGE_TAG: latest                             # tag we inspect on GHCR
+      REPO: ${{ github.repository }}          # e.g. gabrielenterprises/docker_manager_io
+      IMAGE_TAG: latest                       # tag we inspect on GHCR
     steps:
       # --------------------------------------------------------------
       # 1️⃣ Retrieve the latest upstream Manager.io version
@@ -38,7 +38,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # --------------------------------------------------------------
-      # 2️⃣ Obtain a token that can pull from GHCR
+      # 2️⃣ Obtain a short‑lived token that can pull from GHCR
       # --------------------------------------------------------------
       - name: Get GHCR pull token
         id: ghcr_token
@@ -52,7 +52,7 @@ jobs:
         # No extra env needed – the request is unauthenticated
 
       # --------------------------------------------------------------
-      # 3️⃣ Pull the manifest **list** for the tag (e.g. latest)
+      # 3️⃣ Pull the **manifest list** (OCI index) for the tag (e.g. latest)
       # --------------------------------------------------------------
       - name: Pull manifest list
         id: manifest_list
@@ -62,14 +62,17 @@ jobs:
             -H "Accept: application/vnd.oci.image.index.v1+json" \
             "https://ghcr.io/v2/${REPO}/manifests/${IMAGE_TAG}")
 
-          # Bail out if the response contains an error object
+          # If the response contains an error object, abort with a helpful message
           if echo "$LIST" | jq -e 'has("errors")' >/dev/null; then
             echo "❌ Failed to fetch manifest list for ${IMAGE_TAG}:" >> $GITHUB_STEP_SUMMARY
             echo "$LIST" >> $GITHUB_STEP_SUMMARY
             exit 1
           fi
 
-          echo "list=$LIST" >> $GITHUB_OUTPUT
+          # Write the JSON as a **multiline** output (required syntax!)
+          echo "list<<EOF" >> $GITHUB_OUTPUT
+          echo "$LIST" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
         env:
           REPO: ${{ env.REPO }}
           IMAGE_TAG: ${{ env.IMAGE_TAG }}
@@ -96,7 +99,7 @@ jobs:
           REPO: ${{ env.REPO }}
 
       # --------------------------------------------------------------
-      # 5️⃣ Pull the **architecture manifest** (this contains the config)
+      # 5️⃣ Pull the **architecture manifest** (contains the config with labels)
       # --------------------------------------------------------------
       - name: Pull architecture manifest
         id: arch_manifest
@@ -105,7 +108,11 @@ jobs:
             -H "Authorization: Bearer ${{ steps.ghcr_token.outputs.token }}" \
             -H "Accept: application/vnd.oci.image.manifest.v1+json" \
             "https://ghcr.io/v2/${REPO}/manifests/${{ steps.arch_digest.outputs.digest }}")
-          echo "manifest=$MANIFEST" >> $GITHUB_OUTPUT
+
+          # Write it as a multiline output (same technique as above)
+          echo "manifest<<EOF" >> $GITHUB_OUTPUT
+          echo "$MANIFEST" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
         env:
           REPO: ${{ env.REPO }}
 
