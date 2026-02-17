@@ -223,11 +223,12 @@ jobs:
           FILE_SHA256=$(echo "$UPLOAD_RESPONSE" | jq -r '.data.attributes.sha256 // .meta.file_info.sha256 // empty')
           echo "Extracted SHA256: $FILE_SHA256"
           if [ -n "$FILE_SHA256" ]; then
-            SCAN_URL="https://www.virustotal.com/gui/file/$FILE_SHA256"
+            SCAN_URL="https://www.virustotal.com/gui/file/$FILE_SHA256/detection"
             echo "VirusTotal scan URL: $SCAN_URL"
           else
-            SCAN_URL="https://www.virustotal.com/gui/home/upload"
-            echo "Could not extract SHA256, using fallback URL"
+            # Use binary SHA256 from download step as fallback
+            SCAN_URL="https://www.virustotal.com/gui/file/${{ steps.download.outputs.BINARY_SHA256 }}/detection"
+            echo "Using binary SHA256 for scan URL"
           fi
           
           # Wait for analysis to complete (poll every 15 seconds, max 5 minutes)
@@ -458,17 +459,20 @@ jobs:
           body: |
             Auto‑generated release – Docker image built from upstream Manager.io ${{ steps.tag.outputs.LATEST_RELEASE_TAG }}.
 
+            **Upstream Manager.io**
+            - Release: [${{ steps.tag.outputs.LATEST_RELEASE_TAG }}](https://github.com/Manager-io/Manager/releases/tag/${{ steps.tag.outputs.LATEST_RELEASE_TAG }})
+            - Verified via: `git verify-tag`
+
             **Build Information**
             - Build Timestamp: ${{ steps.timestamp.outputs.BUILD_TIMESTAMP }}
-            - Manager.io Version: ${{ steps.tag.outputs.LATEST_RELEASE_TAG }}
-            - GitHub SHA: ${{ github.sha }}
-            - Build Run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            - Workflow Run: [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
 
             **Security Verification**
             - Manager.io Release Signature: ${{ steps.verify.outputs.VERIFICATION_STATUS }}
               - Details: ${{ steps.verify.outputs.VERIFICATION_DETAILS }}
             - VirusTotal Scan: ${{ steps.virustotal.outputs.SCAN_STATUS }}
-              - Scan URL: ${{ steps.virustotal.outputs.SCAN_URL }}
+              - Binary SHA256: `${{ steps.download.outputs.BINARY_SHA256 }}`
+              - [View Scan Results](${{ steps.virustotal.outputs.SCAN_URL }})
               - Details: ${{ steps.virustotal.outputs.SCAN_DETAILS }}
 
             **Docker Images**
