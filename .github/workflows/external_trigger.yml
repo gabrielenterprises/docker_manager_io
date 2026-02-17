@@ -1,10 +1,10 @@
 # --------------------------------------------------------------
-# Version C – External Trigger (single‑step manifest fetch)
+# Version D – External Trigger (single‑step manifest fetch, jq fixed)
 # --------------------------------------------------------------
 # This workflow:
 #   1️⃣ Retrieves the latest Manager.io release tag.
 #   2️⃣ Pulls the OCI manifest list for the `latest` tag from GHCR
-#      **and extracts the amd64 digest in the same command**.
+#      and extracts the amd64 digest in a single command.
 #   3️⃣ Pulls that architecture‑specific manifest (contains the config).
 #   4️⃣ Reads the OCI label `org.opencontainers.image.version`.
 #   5️⃣ Compares it to the upstream tag and dispatches Builder only
@@ -61,7 +61,8 @@ jobs:
             echo "❌ Failed to obtain GHCR token" >> $GITHUB_STEP_SUMMARY
             exit 1
           fi
-          echo "token=$TOKEN" >> $GITHUB_OUTPUT   # expose for later steps
+          # Export the token for later steps
+          echo "token=$TOKEN" >> $GITHUB_OUTPUT
 
       # --------------------------------------------------------------
       # 3️⃣ Pull manifest list **and** extract the amd64 digest (single step)
@@ -75,7 +76,7 @@ jobs:
             -H "Accept: application/vnd.oci.image.index.v1+json" \
             "https://ghcr.io/v2/${REPO}/manifests/${IMAGE_TAG}" |
             jq -r '
-              # If the response contains an error object, abort early
+              # Abort early if the response contains an error object
               if has("errors") then
                 halt_error(1; "GHCR returned an error object")
               end
