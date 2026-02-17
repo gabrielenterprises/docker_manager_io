@@ -1,5 +1,5 @@
 # --------------------------------------------------------------
-# Version H – External Trigger (single‑step manifest fetch, jq fixed)
+# Version I – External Trigger (single‑step manifest fetch, jq fixed)
 # --------------------------------------------------------------
 # This workflow:
 #   1️⃣ Retrieves the latest Manager.io release tag.
@@ -70,22 +70,14 @@ jobs:
       - name: Get amd64 manifest digest
         id: arch_digest
         run: |
-          # `-f` makes curl fail on HTTP >=400, `-s` silences progress
           ARCH_DIGEST=$(curl -sf \
             -H "Authorization: Bearer ${{ steps.ghcr_token.outputs.token }}" \
             -H "Accept: application/vnd.oci.image.index.v1+json" \
             "https://ghcr.io/v2/${REPO}/manifests/${IMAGE_TAG}" |
-            jq -r '
-              if has("errors") then
-                halt_error(1; "GHCR returned an error object")
-              end
-              .manifests[]?
-              | select(.platform.architecture == "amd64")
-              | .digest
-              // .manifests[0].digest
-            ') || {
-            echo "❌ Failed to obtain architecture digest (bad token, missing tag, or malformed manifest)." >> $GITHUB_STEP_SUMMARY
-            exit 1
+            jq -r 'if has("errors") then halt_error(1; "GHCR returned an error object") end | .manifests[]? | select(.platform.architecture == "amd64") | .digest // .manifests[0].digest'
+         ) || {
+             echo "❌ Failed to obtain architecture digest (bad token, missing tag, or malformed manifest)." >> $GITHUB_STEP_SUMMARY
+             exit 1
           }
 
           if [ -z "$ARCH_DIGEST" ]; then
@@ -95,8 +87,7 @@ jobs:
 
           echo "digest=$ARCH_DIGEST" >> $GITHUB_OUTPUT
         env:
-          REPO: ${{ env.REPO }}
-
+          REPO: ${{ env.REPO }} 
       # --------------------------------------------------------------
       # 4️⃣ Pull the architecture manifest (contains the config with labels)
       # --------------------------------------------------------------
