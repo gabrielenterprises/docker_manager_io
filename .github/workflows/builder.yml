@@ -215,6 +215,7 @@ jobs:
           
           # Extract file SHA256 from upload response to construct scan URL
           # VirusTotal API returns the hash in .data.attributes.sha256 or .meta.file_info.sha256
+          # If extraction fails, use empty string to trigger fallback URL
           FILE_SHA256=$(echo "$UPLOAD_RESPONSE" | jq -r '.data.attributes.sha256 // .meta.file_info.sha256 // empty')
           echo "Extracted SHA256: $FILE_SHA256"
           if [ -n "$FILE_SHA256" ]; then
@@ -244,7 +245,7 @@ jobs:
               # Check results
               MALICIOUS=$(echo "$ANALYSIS_RESPONSE" | jq -r '.data.attributes.stats.malicious')
               SUSPICIOUS=$(echo "$ANALYSIS_RESPONSE" | jq -r '.data.attributes.stats.suspicious')
-              UNDETECTED=$(echo "$ANALYSIS_RESPONSE" | jq -r '.data.attributes.stats.undetected // "unknown"')
+              UNDETECTED=$(echo "$ANALYSIS_RESPONSE" | jq -r '.data.attributes.stats.undetected // 0')
               
               echo "VirusTotal Results:"
               echo "  Malicious detections: $MALICIOUS"
@@ -261,9 +262,14 @@ jobs:
               fi
               
               echo "✅ Binary passed VirusTotal scan"
-              echo "SCAN_STATUS=✅ Clean ($UNDETECTED engines, 0 malicious)" >> $GITHUB_OUTPUT
+              if [ "$UNDETECTED" -gt 0 ]; then
+                echo "SCAN_STATUS=✅ Clean ($UNDETECTED engines, 0 malicious)" >> $GITHUB_OUTPUT
+                echo "SCAN_DETAILS=0 malicious detections from $UNDETECTED security vendors" >> $GITHUB_OUTPUT
+              else
+                echo "SCAN_STATUS=✅ Clean (0 malicious)" >> $GITHUB_OUTPUT
+                echo "SCAN_DETAILS=0 malicious detections" >> $GITHUB_OUTPUT
+              fi
               echo "SCAN_URL=$SCAN_URL" >> $GITHUB_OUTPUT
-              echo "SCAN_DETAILS=0 malicious detections from $UNDETECTED security vendors" >> $GITHUB_OUTPUT
               break
             fi
           done
