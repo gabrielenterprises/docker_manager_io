@@ -1,0 +1,14 @@
+# Docker Manager.io Build Audit Log
+# Automated builds with supply chain security verification
+
+========================================
+Build Date: 2026-02-17 20:23:23 UTC
+Version: 26.2.13.3181
+GitHub SHA: 280f395e90febd7167f3432620c5407d4b42317a
+Run ID: 22114228066
+Binary SHA256: 23688dc42db50d0d41597d4b0b84f955b2b2741246ba76f6c0b70d4c51e4e9a6
+Image Digest: sha256:f23fff6d1b3e68276a6149358091c04b651f92b55534fe0f553f10e8c76e5b4b
+Cosign Signed: Yes
+Manifest: build-manifest-26.2.13.3181.json
+========================================
+
