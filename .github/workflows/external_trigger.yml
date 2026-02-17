@@ -1,5 +1,5 @@
 # --------------------------------------------------------------
-# Version M – External Trigger (Fixed multiline blob handling)
+# Version N – External Trigger (Enhanced debugging)
 # OCI Image Version Detection and Builder Dispatch
 # --------------------------------------------------------------
 # This workflow:
@@ -107,11 +107,11 @@ jobs:
 
           echo "config_digest=$CONFIG_DIGEST" >> $GITHUB_OUTPUT
 
-      # Step 5: Fetch the config blob and extract version label directly
+      # Step 5: Fetch the config blob and extract version label
       - name: Extract image version label
         id: imgver
         run: |
-          # Fetch config blob and extract version in one step to avoid multiline output issues
+          # Fetch config blob
           CONFIG=$(curl -sf \
             -H "Authorization: Bearer ${{ steps.ghcr_token.outputs.token }}" \
             "https://ghcr.io/v2/${REPO}/blobs/${{ steps.arch_manifest.outputs.config_digest }}") || {
@@ -119,13 +119,25 @@ jobs:
             exit 1
           }
 
-          # Extract the version label directly from the config
+          echo "=== Config Blob Structure ===" >> $GITHUB_STEP_SUMMARY
+          echo "$CONFIG" | jq '.' >> $GITHUB_STEP_SUMMARY
+          echo "=== End Config ===" >> $GITHUB_STEP_SUMMARY
+
+          # Try multiple possible paths for the version label
           IMG_LABEL=$(echo "$CONFIG" | jq -r '.config.Labels["org.opencontainers.image.version"]? // empty')
+          
+          if [ -z "$IMG_LABEL" ]; then
+            IMG_LABEL=$(echo "$CONFIG" | jq -r '.Labels["org.opencontainers.image.version"]? // empty')
+          fi
+          
+          if [ -z "$IMG_LABEL" ]; then
+            IMG_LABEL=$(echo "$CONFIG" | jq -r 'if type == "object" then to_entries | map(select(.key == "org.opencontainers.image.version")) | .[0].value else empty end')
+          fi
 
           if [ -z "$IMG_LABEL" ]; then
-            echo "���️ Version label not found in image config." >> $GITHUB_STEP_SUMMARY
-            echo "Config structure for debugging:" >> $GITHUB_STEP_SUMMARY
-            echo "$CONFIG" | jq '.config.Labels // "No Labels found"' >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ Version label not found in image config." >> $GITHUB_STEP_SUMMARY
+            echo "Available keys in config:" >> $GITHUB_STEP_SUMMARY
+            echo "$CONFIG" | jq 'keys' >> $GITHUB_STEP_SUMMARY
             exit 1
           fi
 
