@@ -50,8 +50,12 @@ jobs:
           RELEASE_TAG=$(echo "${LATEST}" | tr -d 'v~,%@+;:/ ')
           echo "Sanitized release tag: $RELEASE_TAG"
           
+          # Normalize versions by removing 'v' prefix for comparison
+          LATEST_NORMALIZED=$(echo "${LATEST}" | sed 's/^v//')
+          LAST_BUILT_NORMALIZED=$(echo "${LAST_BUILT}" | sed 's/^v//')
+          
           # Only build if versions differ
-          if [ "$LATEST" != "$LAST_BUILT" ]; then
+          if [ "$LATEST_NORMALIZED" != "$LAST_BUILT_NORMALIZED" ]; then
             echo "✅ Version changed from $LAST_BUILT to $LATEST - build required"
             {
               echo "should-build=true"
