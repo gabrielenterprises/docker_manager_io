@@ -1,5 +1,5 @@
 # --------------------------------------------------------------
-# Version P – External Trigger (Diagnostic mode)
+# Version Q – External Trigger (Fixed blob fetching)
 # OCI Image Version Detection and Builder Dispatch
 # --------------------------------------------------------------
 
@@ -100,48 +100,38 @@ jobs:
           echo "✅ Config digest: $CONFIG_DIGEST" >> $GITHUB_STEP_SUMMARY
           echo "config_digest=$CONFIG_DIGEST" >> $GITHUB_OUTPUT
 
-      # Step 5: Fetch the config blob with detailed diagnostics
+      # Step 5: Fetch the config blob and extract version label
       - name: Extract image version label
         id: imgver
         run: |
-          CONFIG_DIGEST="${{ steps.arch_manifest.outputs.config_digest }}"
-          TOKEN="${{ steps.ghcr_token.outputs.token }}"
+          # Fetch config blob - use -s for silent, don't mix verbose output with data
+          CONFIG=$(curl -s \
+            -H "Authorization: Bearer ${{ steps.ghcr_token.outputs.token }}" \
+            "https://ghcr.io/v2/${REPO}/blobs/${{ steps.arch_manifest.outputs.config_digest }}")
           
-          echo "Attempting to fetch blob: $CONFIG_DIGEST" >> $GITHUB_STEP_SUMMARY
-          echo "Token length: ${#TOKEN}" >> $GITHUB_STEP_SUMMARY
-          
-          # Fetch with verbose output
-          echo "Fetching config blob…" >> $GITHUB_STEP_SUMMARY
-          CONFIG=$(curl -v \
-            -H "Authorization: Bearer $TOKEN" \
-            "https://ghcr.io/v2/${REPO}/blobs/$CONFIG_DIGEST" 2>&1)
-          
-          CURL_EXIT=$?
-          echo "Curl exit code: $CURL_EXIT" >> $GITHUB_STEP_SUMMARY
-          
-          # Save first 1000 chars for inspection
-          echo "Response (first 1000 chars):" >> $GITHUB_STEP_SUMMARY
-          echo "$CONFIG" | head -c 1000 >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          # Check if response is empty
           if [ -z "$CONFIG" ]; then
-            echo "❌ CONFIG variable is empty!" >> $GITHUB_STEP_SUMMARY
+            echo "❌ Failed to fetch config blob - empty response" >> $GITHUB_STEP_SUMMARY
             exit 1
           fi
-          
-          # Check if response looks like JSON
-          if echo "$CONFIG" | grep -q '{'; then
-            echo "✅ Response contains JSON" >> $GITHUB_STEP_SUMMARY
-            IMG_LABEL=$(echo "$CONFIG" | jq -r '.config.Labels["org.opencontainers.image.version"]? // empty' 2>&1)
-            echo "Extracted label: '$IMG_LABEL'" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "⚠️ Response does not look like JSON" >> $GITHUB_STEP_SUMMARY
-            echo "Response type: $(file - <<< "$CONFIG")" >> $GITHUB_STEP_SUMMARY
-          fi
-          
+
+          # Log first part of response for debugging
+          echo "Config blob fetched (first 200 chars):" >> $GITHUB_STEP_SUMMARY
+          echo "$CONFIG" | head -c 200 >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Extract version label from config
+          IMG_LABEL=$(echo "$CONFIG" | jq -r '.config.Labels["org.opencontainers.image.version"]? // empty')
+
           if [ -z "$IMG_LABEL" ]; then
-            echo "❌ Failed to extract version label" >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ Label not at .config.Labels, trying .Labels" >> $GITHUB_STEP_SUMMARY
+            IMG_LABEL=$(echo "$CONFIG" | jq -r '.Labels["org.opencontainers.image.version"]? // empty')
+          fi
+
+          if [ -z "$IMG_LABEL" ]; then
+            echo "⚠️ Label not found at expected paths. Available top-level keys:" >> $GITHUB_STEP_SUMMARY
+            echo "$CONFIG" | jq 'keys' >> $GITHUB_STEP_SUMMARY
+            echo "Available .config keys:" >> $GITHUB_STEP_SUMMARY
+            echo "$CONFIG" | jq '.config | keys' 2>/dev/null >> $GITHUB_STEP_SUMMARY
             exit 1
           fi
 
