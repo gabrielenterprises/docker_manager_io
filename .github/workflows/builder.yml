@@ -136,7 +136,7 @@ jobs:
         run: |
           echo "Verifying Manager.io release commit signature..."
           
-          # Get release information including commit SHA
+          # Get release information
           RELEASE_INFO=$(curl -sL "https://api.github.com/repos/Manager-io/Manager/releases/tags/${{ steps.tag.outputs.LATEST_RELEASE_TAG }}")
           
           # Check if the release exists
@@ -156,21 +156,22 @@ jobs:
           echo "  Published: $PUBLISHED_AT"
           echo "  URL: $RELEASE_URL"
           
-          # Get commit SHA from release
-          COMMIT_SHA=$(echo "$RELEASE_INFO" | jq -r '.target_commitish')
+          # Fetch commit for this tag directly (tag name works as a ref in the commits API)
+          # This avoids issues where target_commitish might be a branch name instead of commit SHA
+          COMMIT_DATA=$(curl -sL "https://api.github.com/repos/Manager-io/Manager/commits/$TAG_NAME")
+          
+          # Extract commit SHA for logging
+          COMMIT_SHA=$(echo "$COMMIT_DATA" | jq -r '.sha')
           
           if [ -z "$COMMIT_SHA" ] || [ "$COMMIT_SHA" = "null" ]; then
-            echo "❌ Failed to extract commit SHA from release"
+            echo "❌ Failed to fetch commit for tag"
             echo "VERIFICATION_METHOD=GitHub Commit Signature API" >> "$GITHUB_OUTPUT"
             echo "VERIFICATION_STATUS=❌ Failed" >> "$GITHUB_OUTPUT"
-            echo "VERIFICATION_DETAILS=Could not extract commit SHA" >> "$GITHUB_OUTPUT"
+            echo "VERIFICATION_DETAILS=Could not fetch commit for tag" >> "$GITHUB_OUTPUT"
             exit 1
           fi
           
           echo "Commit SHA: $COMMIT_SHA"
-          
-          # Fetch commit verification details from GitHub API
-          COMMIT_DATA=$(curl -sL "https://api.github.com/repos/Manager-io/Manager/commits/$COMMIT_SHA")
           
           # Extract verification details
           VERIFIED=$(echo "$COMMIT_DATA" | jq -r '.commit.verification.verified')
