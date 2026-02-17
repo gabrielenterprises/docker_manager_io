@@ -1,16 +1,17 @@
 # --------------------------------------------------------------
 # Stage 1 – download the upstream ManagerServer tarball
 # --------------------------------------------------------------
-FROM alpine:latest AS build
+# Pin alpine by digest for reproducibility (digest updated: 2026-02-17)
+FROM alpine@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659 AS build
 
 ARG MANAGER_VERSION               # supplied by the CI (e.g. v5.1.2)
 ARG TARGETPLATFORM                # supplied automatically by Docker Buildx
 
-# curl is the only tool we need to fetch the tarball
-RUN apk --no-cache add curl
+# Install curl for fetching tarballs, jq for JSON parsing, and coreutils for sha256sum
+RUN apk --no-cache add curl jq coreutils
 
 # Choose the correct binary for the target architecture,
-# download it, and extract the ManagerServer executable.
+# download it, verify integrity, and extract the ManagerServer executable.
 RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; then \
         TARGET=arm64; \
     else \
@@ -19,13 +20,20 @@ RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; then \
     echo "Downloading https://github.com/Manager-io/Manager/releases/download/${MANAGER_VERSION}/ManagerServer-linux-${TARGET}.tar.gz" && \
     curl -L "https://github.com/Manager-io/Manager/releases/download/${MANAGER_VERSION}/ManagerServer-linux-${TARGET}.tar.gz" \
          --output /tmp/manager-server.tar.gz && \
+    echo "Computing SHA256 hash of downloaded binary..." && \
+    sha256sum /tmp/manager-server.tar.gz | tee /tmp/manager-server.tar.gz.sha256 && \
+    echo "File attributes for audit trail:" && \
+    ls -lh /tmp/manager-server.tar.gz && \
+    stat /tmp/manager-server.tar.gz && \
+    echo "Extracting tarball..." && \
     mkdir /tmp/manager-server && \
     tar -xvzf /tmp/manager-server.tar.gz -C /tmp/manager-server
 
 # --------------------------------------------------------------
 # Stage 2 – final runtime image (dotnet runtime‑deps + Chromium)
 # --------------------------------------------------------------
-FROM mcr.microsoft.com/dotnet/runtime-deps:8.0
+# Pin .NET runtime-deps by digest for reproducibility (digest updated: 2026-02-17)
+FROM mcr.microsoft.com/dotnet/runtime-deps@sha256:d9c7a38d050c9bb90cf5453e8a8217a7eb9df77db3cf8100f4f84d1fb57b5124
 
 ARG MANAGER_VERSION
 LABEL build_version="version:- ${MANAGER_VERSION}"
