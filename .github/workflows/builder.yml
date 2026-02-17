@@ -214,15 +214,20 @@ jobs:
           echo "Analysis ID: $ANALYSIS_ID"
           
           # Extract file SHA256 from upload response to construct scan URL
-          FILE_SHA256=$(echo "$UPLOAD_RESPONSE" | jq -r '.data.attributes.sha256 // empty')
+          # VirusTotal API returns the hash in .data.attributes.sha256 or .meta.file_info.sha256
+          FILE_SHA256=$(echo "$UPLOAD_RESPONSE" | jq -r '.data.attributes.sha256 // .meta.file_info.sha256 // empty')
+          echo "Extracted SHA256: $FILE_SHA256"
           if [ -n "$FILE_SHA256" ]; then
             SCAN_URL="https://www.virustotal.com/gui/file/$FILE_SHA256"
+            echo "VirusTotal scan URL: $SCAN_URL"
           else
             SCAN_URL="https://www.virustotal.com/gui/home/upload"
+            echo "Could not extract SHA256, using fallback URL"
           fi
           
           # Wait for analysis to complete (poll every 15 seconds, max 5 minutes)
           echo "Waiting for VirusTotal analysis to complete..."
+          ANALYSIS_COMPLETED=false
           for i in {1..20}; do
             sleep 15
             ANALYSIS_RESPONSE=$(curl -s --request GET \
@@ -230,15 +235,16 @@ jobs:
               --header "x-apikey: $VIRUSTOTAL_API_KEY")
             
             STATUS=$(echo "$ANALYSIS_RESPONSE" | jq -r '.data.attributes.status')
-            echo "Analysis status: $STATUS"
+            echo "Analysis status (iteration $i): $STATUS"
             
             if [ "$STATUS" = "completed" ]; then
               echo "✅ Analysis completed"
+              ANALYSIS_COMPLETED=true
               
               # Check results
               MALICIOUS=$(echo "$ANALYSIS_RESPONSE" | jq -r '.data.attributes.stats.malicious')
               SUSPICIOUS=$(echo "$ANALYSIS_RESPONSE" | jq -r '.data.attributes.stats.suspicious')
-              UNDETECTED=$(echo "$ANALYSIS_RESPONSE" | jq -r '.data.attributes.stats.undetected')
+              UNDETECTED=$(echo "$ANALYSIS_RESPONSE" | jq -r '.data.attributes.stats.undetected // "unknown"')
               
               echo "VirusTotal Results:"
               echo "  Malicious detections: $MALICIOUS"
@@ -263,11 +269,11 @@ jobs:
           done
           
           # Check if we timed out
-          if [ "$STATUS" != "completed" ]; then
-            echo "⚠️ Analysis did not complete within timeout"
-            echo "SCAN_STATUS=⚠️ Timeout" >> $GITHUB_OUTPUT
+          if [ "$ANALYSIS_COMPLETED" = "false" ]; then
+            echo "⚠️ Analysis did not complete within timeout (status: $STATUS)"
+            echo "SCAN_STATUS=⚠️ Timeout (last status: $STATUS)" >> $GITHUB_OUTPUT
             echo "SCAN_URL=$SCAN_URL" >> $GITHUB_OUTPUT
-            echo "SCAN_DETAILS=Analysis did not complete within timeout" >> $GITHUB_OUTPUT
+            echo "SCAN_DETAILS=Analysis did not complete within 5 minutes (last status: $STATUS)" >> $GITHUB_OUTPUT
           fi
         env:
           VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
