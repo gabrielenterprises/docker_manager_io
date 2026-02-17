@@ -72,7 +72,7 @@ jobs:
             echo "✅ Version changed from $LAST_BUILT to $LATEST - build required"
             echo "should-build=true" >> "$GITHUB_OUTPUT"
           else
-            echo "ℹ️ Version unchanged ($LATEST) - skipping build"
+            echo "ℹ️ Version unchanged (build will only run if manually triggered)"
             echo "should-build=false" >> "$GITHUB_OUTPUT"
           fi
         env:
@@ -318,6 +318,15 @@ jobs:
           echo "DOTNET_DIGEST=$DOTNET_DIGEST" >> $GITHUB_OUTPUT
 
       # Step 9: Build & push Docker image (immutable tags + mutable latest)
+      # This step creates a multi-arch Docker image with the following outputs in GHCR:
+      # 1. Three named tags:
+      #    - latest (mutable, always points to newest build)
+      #    - <version> (e.g., 26.2.13.3181)
+      #    - <version>-<sha> (e.g., 26.2.13.3181-abc123def456)
+      # 2. Platform-specific images for each architecture (linux/amd64, linux/arm64)
+      # 3. An "untagged" entry which is the manifest index (or manifest list) that ties
+      #    together the platform-specific images. This is normal and expected for multi-arch
+      #    builds - it allows Docker to automatically select the correct platform image.
       - name: Build and push Docker image
         id: build
         uses: docker/build-push-action@v6
