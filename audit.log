@@ -45,3 +45,14 @@ Cosign Signed: Yes
 Manifest: build-manifest-26.2.13.3181.json
 ========================================
 
+========================================
+Build Date: 2026-02-17 23:08:42 UTC
+Version: 26.2.13.3181
+GitHub SHA: 3b8ff97c712d2f79ebe00b8d847c993091e7a002
+Run ID: 22119167279
+Binary SHA256: 23688dc42db50d0d41597d4b0b84f955b2b2741246ba76f6c0b70d4c51e4e9a6
+Image Digest: sha256:537fd486709f61183fef64ea9109e2f14ed1bc14975f28183c8b0705e2aacdc9
+Cosign Signed: Yes
+Manifest: build-manifest-26.2.13.3181.json
+========================================
+
