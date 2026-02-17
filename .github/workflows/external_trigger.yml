@@ -1,5 +1,5 @@
 # --------------------------------------------------------------
-# Version H – External Trigger (single‑step manifest fetch, jq fixed)
+# Version J – External Trigger (single‑step manifest fetch, jq fixed)
 # --------------------------------------------------------------
 # This workflow:
 #   1️⃣ Retrieves the latest Manager.io release tag.
@@ -71,14 +71,27 @@ jobs:
         id: arch_digest
         run: |
           # `-f` makes curl fail on HTTP >=400, `-s` silences progress
-          ARCH_DIGEST=$(curl -sf \
+          MANIFEST_JSON=$(curl -sf \
             -H "Authorization: Bearer ${{ steps.ghcr_token.outputs.token }}" \
             -H "Accept: application/vnd.oci.image.index.v1+json" \
-            "https://ghcr.io/v2/${REPO}/manifests/${IMAGE_TAG}" |
-            jq -r 'if has("errors") then halt_error(1; "GHCR returned an error object") end | .manifests[]? | select(.platform.architecture == "amd64") | .digest // .manifests[0].digest') || {
-            echo "❌ Failed to obtain architecture digest (bad token, missing tag, or malformed manifest)." >> $GITHUB_STEP_SUMMARY
+            "https://ghcr.io/v2/${REPO}/manifests/${IMAGE_TAG}") || {
+            echo "❌ Failed to fetch manifest list (bad token, missing tag, or connection error)." >> $GITHUB_STEP_SUMMARY
             exit 1
           }
+
+          # Check if the response contains an error object
+          if echo "$MANIFEST_JSON" | jq -e 'has("errors")' > /dev/null 2>&1; then
+            echo "❌ GHCR returned an error object: $(echo "$MANIFEST_JSON" | jq -r '.errors[0].message // "unknown error"')" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+          # Extract the amd64 digest
+          ARCH_DIGEST=$(echo "$MANIFEST_JSON" | jq -r '.manifests[]? | select(.platform.architecture == "amd64") | .digest' | head -n1)
+
+          # Fallback to first manifest digest if no amd64 found
+          if [ -z "$ARCH_DIGEST" ]; then
+            ARCH_DIGEST=$(echo "$MANIFEST_JSON" | jq -r '.manifests[0].digest')
+          fi
 
           if [ -z "$ARCH_DIGEST" ]; then
             echo "❌ Architecture digest resolved to empty – something went wrong." >> $GITHUB_STEP_SUMMARY
