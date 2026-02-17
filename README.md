@@ -8,7 +8,7 @@ This repository provides a secure, automated Docker image build pipeline for [Ma
 
 This project implements automated supply chain security best practices that require **zero manual intervention** and leave a complete, reproducible audit trail:
 
-1. **✅ Release Tag Signature Verification** - Verifies upstream Manager.io release tags are signed
+1. **✅ Release Tag Authenticity Verification** - Confirms release tags exist on GitHub (GitHub-verified signatures)
 2. **✅ VirusTotal Malware Scanning** - Scans downloaded binaries before build (optional, requires API key)
 3. **✅ SHA256 Hash Verification** - Computes and logs cryptographic hashes of all binaries
 4. **✅ Digest-Pinned Base Images** - All base images pinned by SHA256 digest for reproducibility
@@ -139,7 +139,7 @@ Base images are pinned by digest in the Dockerfile for reproducibility. To updat
 The automated build workflow performs these steps:
 
 1. **Get Latest Release** - Fetches latest Manager.io version from GitHub API
-2. **Verify Tag Signature** - Attempts GPG verification of release tag
+2. **Verify Release Authenticity** - Confirms release tag exists on GitHub (GitHub-verified)
 3. **Download Binary** - Downloads amd64 binary for verification
 4. **VirusTotal Scan** - Submits binary to VirusTotal (if API key configured)
 5. **Compute Hash** - Calculates SHA256 hash of binary
