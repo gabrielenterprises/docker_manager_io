@@ -177,7 +177,7 @@ jobs:
             exit 1
           fi
           
-          echo "Upload URL obtained: $UPLOAD_URL"
+          echo "✅ Upload URL obtained successfully"
           
           # Step 2: Upload file to the obtained URL
           UPLOAD_RESPONSE=$(curl -s --request POST \
