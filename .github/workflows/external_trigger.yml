@@ -1,5 +1,5 @@
 # --------------------------------------------------------------
-# Version G – External Trigger (single‑step manifest fetch, jq fixed)
+# Version H – External Trigger (single‑step manifest fetch, jq fixed)
 # --------------------------------------------------------------
 # This workflow:
 #   1️⃣ Retrieves the latest Manager.io release tag.
@@ -76,11 +76,9 @@ jobs:
             -H "Accept: application/vnd.oci.image.index.v1+json" \
             "https://ghcr.io/v2/${REPO}/manifests/${IMAGE_TAG}" |
             jq -r '
-              # Abort early if the response contains an error object
               if has("errors") then
                 halt_error(1; "GHCR returned an error object")
               end
-              # Pick the amd64 digest; if none, fall back to the first manifest
               .manifests[]?
               | select(.platform.architecture == "amd64")
               | .digest
