@@ -70,7 +70,15 @@ jobs:
     if: needs.check-version.outputs.should-build == 'true'
     runs-on: ubuntu-latest
     steps:
-      # Step 1: Checkout the repository (Dockerfile + wrapper, etc.)
+      # Step 1: Capture build timestamp
+      - name: Capture Build Timestamp
+        id: timestamp
+        run: |
+          BUILD_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          echo "BUILD_TIMESTAMP=$BUILD_TIMESTAMP" >> $GITHUB_OUTPUT
+          echo "Build timestamp: $BUILD_TIMESTAMP"
+
+      # Step 2: Checkout the repository (Dockerfile + wrapper, etc.)
       - name: Checkout Code
         uses: actions/checkout@v6
 
@@ -106,6 +114,7 @@ jobs:
 
       # Step 5: Verify upstream release tag signature
       - name: Verify Release Tag Signature
+        id: verify
         run: |
           echo "Cloning Manager.io repository to verify tag signature..."
           git clone --depth 1 --branch ${{ steps.tag.outputs.LATEST_RELEASE_TAG }} https://github.com/Manager-io/Manager.git /tmp/manager-repo || {
@@ -121,6 +130,8 @@ jobs:
           echo "Attempting to verify tag signature for ${{ steps.tag.outputs.LATEST_RELEASE_TAG }}..."
           if git verify-tag ${{ steps.tag.outputs.LATEST_RELEASE_TAG }} 2>&1 | tee /tmp/verify-output.txt; then
             echo "✅ Tag signature verified successfully"
+            echo "VERIFICATION_STATUS=✅ Verified" >> $GITHUB_OUTPUT
+            echo "VERIFICATION_DETAILS=GPG signature verified successfully" >> $GITHUB_OUTPUT
           else
             echo "⚠️ Tag verification output:"
             cat /tmp/verify-output.txt || true
@@ -128,8 +139,12 @@ jobs:
             if grep -q "No public key" /tmp/verify-output.txt || grep -q "no signature found" /tmp/verify-output.txt; then
               echo "⚠️ Tag is not GPG-signed or public key not available. This is common for GitHub releases."
               echo "Proceeding with additional verification steps (VirusTotal scan)..."
+              echo "VERIFICATION_STATUS=⚠️ Not signed or key unavailable" >> $GITHUB_OUTPUT
+              echo "VERIFICATION_DETAILS=Tag is not GPG-signed or public key not available" >> $GITHUB_OUTPUT
             else
               echo "❌ Tag verification failed"
+              echo "VERIFICATION_STATUS=❌ Failed" >> $GITHUB_OUTPUT
+              echo "VERIFICATION_DETAILS=Tag verification failed" >> $GITHUB_OUTPUT
               exit 1
             fi
           fi
@@ -156,11 +171,15 @@ jobs:
 
       # Step 7: Scan binary with VirusTotal
       - name: VirusTotal Scan
+        id: virustotal
         continue-on-error: true
         run: |
           if [ -z "$VIRUSTOTAL_API_KEY" ]; then
             echo "⚠️ VIRUSTOTAL_API_KEY secret not configured. Skipping VirusTotal scan."
             echo "⚠️ For full supply chain security, please add VIRUSTOTAL_API_KEY to repository secrets."
+            echo "SCAN_STATUS=⚠️ Skipped (API key not configured)" >> $GITHUB_OUTPUT
+            echo "SCAN_URL=N/A" >> $GITHUB_OUTPUT
+            echo "SCAN_DETAILS=VirusTotal API key not configured" >> $GITHUB_OUTPUT
             exit 0
           fi
           
@@ -174,6 +193,9 @@ jobs:
           
           if [ -z "$UPLOAD_URL" ] || [ "$UPLOAD_URL" = "null" ]; then
             echo "❌ Failed to get upload URL from VirusTotal"
+            echo "SCAN_STATUS=❌ Failed" >> $GITHUB_OUTPUT
+            echo "SCAN_URL=N/A" >> $GITHUB_OUTPUT
+            echo "SCAN_DETAILS=Failed to get upload URL from VirusTotal" >> $GITHUB_OUTPUT
             exit 1
           fi
           
@@ -190,6 +212,14 @@ jobs:
           # Extract analysis ID
           ANALYSIS_ID=$(echo "$UPLOAD_RESPONSE" | jq -r '.data.id')
           echo "Analysis ID: $ANALYSIS_ID"
+          
+          # Extract file SHA256 from upload response to construct scan URL
+          FILE_SHA256=$(echo "$UPLOAD_RESPONSE" | jq -r '.data.attributes.sha256 // empty')
+          if [ -n "$FILE_SHA256" ]; then
+            SCAN_URL="https://www.virustotal.com/gui/file/$FILE_SHA256"
+          else
+            SCAN_URL="https://www.virustotal.com/gui/home/upload"
+          fi
           
           # Wait for analysis to complete (poll every 15 seconds, max 5 minutes)
           echo "Waiting for VirusTotal analysis to complete..."
@@ -208,21 +238,37 @@ jobs:
               # Check results
               MALICIOUS=$(echo "$ANALYSIS_RESPONSE" | jq -r '.data.attributes.stats.malicious')
               SUSPICIOUS=$(echo "$ANALYSIS_RESPONSE" | jq -r '.data.attributes.stats.suspicious')
+              UNDETECTED=$(echo "$ANALYSIS_RESPONSE" | jq -r '.data.attributes.stats.undetected')
               
               echo "VirusTotal Results:"
               echo "  Malicious detections: $MALICIOUS"
               echo "  Suspicious detections: $SUSPICIOUS"
+              echo "  Undetected: $UNDETECTED"
               
               if [ "$MALICIOUS" -gt 0 ] || [ "$SUSPICIOUS" -gt 3 ]; then
                 echo "❌ Binary failed VirusTotal scan!"
                 echo "Full results: $ANALYSIS_RESPONSE"
+                echo "SCAN_STATUS=❌ Failed ($MALICIOUS malicious, $SUSPICIOUS suspicious)" >> $GITHUB_OUTPUT
+                echo "SCAN_URL=$SCAN_URL" >> $GITHUB_OUTPUT
+                echo "SCAN_DETAILS=$MALICIOUS malicious, $SUSPICIOUS suspicious detections" >> $GITHUB_OUTPUT
                 exit 1
               fi
               
               echo "✅ Binary passed VirusTotal scan"
+              echo "SCAN_STATUS=✅ Clean ($UNDETECTED engines, 0 malicious)" >> $GITHUB_OUTPUT
+              echo "SCAN_URL=$SCAN_URL" >> $GITHUB_OUTPUT
+              echo "SCAN_DETAILS=0 malicious detections from $UNDETECTED security vendors" >> $GITHUB_OUTPUT
               break
             fi
           done
+          
+          # Check if we timed out
+          if [ "$STATUS" != "completed" ]; then
+            echo "⚠️ Analysis did not complete within timeout"
+            echo "SCAN_STATUS=⚠️ Timeout" >> $GITHUB_OUTPUT
+            echo "SCAN_URL=$SCAN_URL" >> $GITHUB_OUTPUT
+            echo "SCAN_DETAILS=Analysis did not complete within timeout" >> $GITHUB_OUTPUT
+          fi
         env:
           VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
 
@@ -396,12 +442,26 @@ jobs:
           body: |
             Auto‑generated release – Docker image built from upstream Manager.io ${{ steps.tag.outputs.LATEST_RELEASE_TAG }}.
 
-            **Docker image tags:**
+            **Build Information**
+            - Build Timestamp: ${{ steps.timestamp.outputs.BUILD_TIMESTAMP }}
+            - Manager.io Version: ${{ steps.tag.outputs.LATEST_RELEASE_TAG }}
+            - GitHub SHA: ${{ github.sha }}
+            - Build Run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            **Security Verification**
+            - Manager.io Release Signature: ${{ steps.verify.outputs.VERIFICATION_STATUS }}
+              - Details: ${{ steps.verify.outputs.VERIFICATION_DETAILS }}
+            - VirusTotal Scan: ${{ steps.virustotal.outputs.SCAN_STATUS }}
+              - Scan URL: ${{ steps.virustotal.outputs.SCAN_URL }}
+              - Details: ${{ steps.virustotal.outputs.SCAN_DETAILS }}
+
+            **Docker Images**
             - `latest`
             - `${{ steps.tag.outputs.RELEASE_TAG }}`
             - `${{ steps.tag.outputs.RELEASE_TAG }}-${{ github.sha }}`
 
-            **Docker image:** `ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ steps.tag.outputs.RELEASE_TAG }}`
+            **Registry**
+            `ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ steps.tag.outputs.RELEASE_TAG }}`
 
           draft: false
           prerelease: false
