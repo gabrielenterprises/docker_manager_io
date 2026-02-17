@@ -101,9 +101,9 @@ jobs:
 
       # Step 7: Scan binary with VirusTotal
       - name: VirusTotal Scan
-        if: ${{ secrets.VIRUSTOTAL_API_KEY != '' }}
+        continue-on-error: true
         run: |
-          if [ -z "${{ secrets.VIRUSTOTAL_API_KEY }}" ]; then
+          if [ -z "$VIRUSTOTAL_API_KEY" ]; then
             echo "⚠️ VIRUSTOTAL_API_KEY secret not configured. Skipping VirusTotal scan."
             echo "⚠️ For full supply chain security, please add VIRUSTOTAL_API_KEY to repository secrets."
             exit 0
@@ -114,7 +114,7 @@ jobs:
           # Upload file to VirusTotal
           UPLOAD_RESPONSE=$(curl -s --request POST \
             --url https://www.virustotal.com/api/v3/files \
-            --header "x-apikey: ${{ secrets.VIRUSTOTAL_API_KEY }}" \
+            --header "x-apikey: $VIRUSTOTAL_API_KEY" \
             --form "file=@/tmp/manager-server-amd64.tar.gz")
           
           echo "Upload response: $UPLOAD_RESPONSE"
@@ -129,7 +129,7 @@ jobs:
             sleep 15
             ANALYSIS_RESPONSE=$(curl -s --request GET \
               --url "https://www.virustotal.com/api/v3/analyses/$ANALYSIS_ID" \
-              --header "x-apikey: ${{ secrets.VIRUSTOTAL_API_KEY }}")
+              --header "x-apikey: $VIRUSTOTAL_API_KEY")
             
             STATUS=$(echo "$ANALYSIS_RESPONSE" | jq -r '.data.attributes.status')
             echo "Analysis status: $STATUS"
@@ -155,6 +155,8 @@ jobs:
               break
             fi
           done
+        env:
+          VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
 
       # Step 8: Get base image digests for manifest
       - name: Get Base Image Digests
