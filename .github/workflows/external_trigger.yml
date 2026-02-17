@@ -1,5 +1,5 @@
 # --------------------------------------------------------------
-# Version A – External Trigger workflow
+# Version B – External Trigger workflow (robust manifest fetch)
 # --------------------------------------------------------------
 # This workflow:
 #   1️⃣ Retrieves the latest Manager.io release tag.
@@ -61,24 +61,28 @@ jobs:
             echo "❌ Failed to obtain GHCR token" >> $GITHUB_STEP_SUMMARY
             exit 1
           fi
-          # Export the token so later steps can use it
+          # Export the token for later steps
           echo "token=$TOKEN" >> $GITHUB_OUTPUT
 
       # --------------------------------------------------------------
-      # 3️⃣ Pull the manifest list (OCI index) for the tag (e.g. latest)
+      # 3️⃣ Pull the **manifest list** (OCI index) for the tag (e.g. latest)
       # --------------------------------------------------------------
       - name: Pull manifest list
         id: manifest_list
         run: |
-          LIST=$(curl -s \
+          # ‑f makes curl exit with a non‑zero code on HTTP ≥400
+          LIST=$(curl -sf \
             -H "Authorization: Bearer ${{ steps.ghcr_token.outputs.token }}" \
             -H "Accept: application/vnd.oci.image.index.v1+json" \
-            "https://ghcr.io/v2/${REPO}/manifests/${IMAGE_TAG}")
+            "https://ghcr.io/v2/${REPO}/manifests/${IMAGE_TAG}") || {
+            echo "❌ Failed to fetch manifest list – HTTP error (maybe missing tag or bad token)." >> $GITHUB_STEP_SUMMARY
+            exit 1
+          }
 
-          # Abort if the response contains an error object
-          if echo "$LIST" | jq -e 'has("errors")' >/dev/null; then
-            echo "❌ Failed to fetch manifest list for ${IMAGE_TAG}:" >> $GITHUB_STEP_SUMMARY
-            echo "$LIST" >> $GITHUB_STEP_SUMMARY
+          # Verify that the payload looks like JSON (starts with a curly brace)
+          if ! echo "$LIST" | head -c 1 | grep -q '{'; then
+            echo "❌ Unexpected response (not JSON). First bytes:" >> $GITHUB_STEP_SUMMARY
+            echo "$LIST" | head -c 200 >> $GITHUB_STEP_SUMMARY
             exit 1
           fi
 
@@ -117,12 +121,15 @@ jobs:
       - name: Pull architecture manifest
         id: arch_manifest
         run: |
-          MANIFEST=$(curl -s \
+          MANIFEST=$(curl -sf \
             -H "Authorization: Bearer ${{ steps.ghcr_token.outputs.token }}" \
             -H "Accept: application/vnd.oci.image.manifest.v1+json" \
-            "https://ghcr.io/v2/${REPO}/manifests/${{ steps.arch_digest.outputs.digest }}")
+            "https://ghcr.io/v2/${REPO}/manifests/${{ steps.arch_digest.outputs.digest }}") || {
+            echo "❌ Failed to fetch architecture manifest (bad digest or token)." >> $GITHUB_STEP_SUMMARY
+            exit 1
+          }
 
-          # Store as multiline output (same technique as step 3)
+          # Store as multiline output (same technique as step 3)
           echo "manifest<<EOF" >> $GITHUB_OUTPUT
           echo "$MANIFEST" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
