@@ -155,15 +155,15 @@ jobs:
             echo "  URL: $RELEASE_URL"
             
             # Set verification method for transparency
-            echo "VERIFICATION_METHOD=GitHub Release API" >> $GITHUB_OUTPUT
-            echo "VERIFICATION_STATUS=✅ Verified" >> $GITHUB_OUTPUT
-            echo "VERIFICATION_DETAILS=Release tag exists on GitHub (GitHub-verified signature)" >> $GITHUB_OUTPUT
+            echo "VERIFICATION_METHOD=GitHub Release API" >> "$GITHUB_OUTPUT"
+            echo "VERIFICATION_STATUS=✅ Verified" >> "$GITHUB_OUTPUT"
+            echo "VERIFICATION_DETAILS=Release tag exists on GitHub (GitHub-verified signature)" >> "$GITHUB_OUTPUT"
           else
             echo "❌ Failed to verify release tag on GitHub"
             echo "Release info response: $RELEASE_INFO"
-            echo "VERIFICATION_METHOD=GitHub Release API" >> $GITHUB_OUTPUT
-            echo "VERIFICATION_STATUS=❌ Failed" >> $GITHUB_OUTPUT
-            echo "VERIFICATION_DETAILS=Release tag not found on GitHub" >> $GITHUB_OUTPUT
+            echo "VERIFICATION_METHOD=GitHub Release API" >> "$GITHUB_OUTPUT"
+            echo "VERIFICATION_STATUS=❌ Failed" >> "$GITHUB_OUTPUT"
+            echo "VERIFICATION_DETAILS=Release tag not found on GitHub" >> "$GITHUB_OUTPUT"
             exit 1
           fi
 
