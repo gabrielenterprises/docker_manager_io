@@ -79,7 +79,7 @@ jobs:
   build:
     needs: check-version
     if: |
-      needs.check-version.result != 'failure' && (
+      needs.check-version.result == 'success' && (
         needs.check-version.outputs.should-build == 'true' ||
         github.event_name == 'push' ||
         github.event_name == 'workflow_dispatch'
