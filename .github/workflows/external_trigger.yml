@@ -1,5 +1,5 @@
 # --------------------------------------------------------------
-# Version D – External Trigger (single‑step manifest fetch, jq fixed)
+# Version E – External Trigger (single‑step manifest fetch, jq fixed)
 # --------------------------------------------------------------
 # This workflow:
 #   1️⃣ Retrieves the latest Manager.io release tag.
