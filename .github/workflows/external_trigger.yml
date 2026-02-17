@@ -142,4 +142,20 @@ jobs:
       - name: Compare versions and possibly trigger Builder
         run: |
           if [ "${EXT_RELEASE}" = "${IMAGE_VERSION}" ]; then
-            echo "✅ Versions
+            echo "✅ Versions match (both = ${EXT_RELEASE}); nothing to do." >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+
+          echo "🚀 New upstream version **${EXT_RELEASE}** differs from image version **${IMAGE_VERSION}**." >> $GITHUB_STEP_SUMMARY
+          echo "Dispatching Builder workflow…" >> $GITHUB_STEP_SUMMARY
+
+          curl -X POST \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            -d "{\"ref\":\"refs/heads/${{ github.ref_name }}\"}" \
+            "https://api.github.com/repos/${REPO}/actions/workflows/builder.yml/dispatches"
+        env:
+          EXT_RELEASE: ${{ env.EXT_RELEASE }}
+          IMAGE_VERSION: ${{ steps.imgver.outputs.image_version }}
+          REPO: ${{ env.REPO }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
