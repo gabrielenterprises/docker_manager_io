@@ -6,8 +6,8 @@ on:
 # Explicit permissions for the automatically‑provided GITHUB_TOKEN
 # --------------------------------------------------------------
 permissions:
-  contents: write        # required to create a GitHub release
-  packages: write        # required to push to GHCR
+  contents: write        # needed to create a GitHub release (tag + release)
+  packages: write        # needed to push to GHCR
 
 jobs:
   build:
@@ -57,37 +57,39 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # --------------------------------------------------------------
-      # 5️⃣ Docker metadata (GHCR only)
-      # --------------------------------------------------------------
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: |
-            ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}
-          tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=pep440,pattern={{version}},value=${{ steps.tag.outputs.RELEASE_TAG }}
-            type=sha,prefix=sha-
-          labels: |
-            org.opencontainers.image.title=Manager.io
-            org.opencontainers.image.source=https://github.com/Manager-io/Manager
-            org.opencontainers.image.version=${{ steps.tag.outputs.RELEASE_TAG }}
-            org.opencontainers.image.licenses=GPL-3.0
-
-      # --------------------------------------------------------------
-      # 6️⃣ Build & push the Docker image (multi‑arch)
+      # 5️⃣ Build & push Docker image (immutable tags + mutable latest)
       # --------------------------------------------------------------
       - name: Build and push Docker image
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:latest
+            ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ steps.tag.outputs.RELEASE_TAG }}
+            ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ steps.tag.outputs.RELEASE_TAG }}-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.title=Manager.io
+            org.opencontainers.image.source=https://github.com/Manager-io/Manager
+            org.opencontainers.image.licenses=GPL-3.0
           build-args: |
             MANAGER_VERSION=${{ steps.tag.outputs.LATEST_RELEASE_TAG }}
+
+      # --------------------------------------------------------------
+      # 6️⃣ (Optional) Save the image digest as an artifact for audit/rollback
+      # --------------------------------------------------------------
+      - name: Save image digest
+        if: always()
+        run: |
+          echo "${{ steps.build.outputs.digest }}" > image-digest.txt
+      - name: Upload digest artifact
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: image-digest
+          path: image-digest.txt
 
       # --------------------------------------------------------------
       # 7️⃣ Create a GitHub release mirroring the upstream version
@@ -100,7 +102,13 @@ jobs:
           body: |
             Auto‑generated release – Docker image built from upstream Manager.io ${{ steps.tag.outputs.LATEST_RELEASE_TAG }}.
 
+            **Docker image tags:**  
+            - `latest`  
+            - `${{ steps.tag.outputs.RELEASE_TAG }}`  
+            - `${{ steps.tag.outputs.RELEASE_TAG }}-${{ github.sha }}`
+
             **Docker image:** `ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ steps.tag.outputs.RELEASE_TAG }}`
+
           draft: false
           prerelease: false
           allowUpdates: true
