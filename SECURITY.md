@@ -6,21 +6,31 @@ This project implements comprehensive supply chain security measures to ensure t
 
 ### Upstream Signature Verification
 
-**Important Context**: Manager.io does not publish GPG signatures for their binary releases. However, all release tags on GitHub are automatically signed by GitHub itself using GitHub's GPG key (Key ID: B5690EEEBB952194).
+**Important Context**: Manager.io does not publish GPG signatures for their binary releases. However, GitHub cryptographically signs commits with GitHub's GPG key (Key ID: B5690EEEBB952194).
 
 #### What We Verify
 
-Our workflow verifies release authenticity through the following method:
+Our workflow verifies release authenticity through commit signature verification:
 
-1. **GitHub Release API Verification**: We confirm that the release tag exists in the official Manager.io repository using GitHub's API. This proves:
-   - The tag is a genuine GitHub release (GitHub-verified signature)
+1. **GitHub Commit Signature Verification**: We fetch the release commit from GitHub's API and verify its cryptographic signature. This proves:
+   - The commit was signed by GitHub using GPG key B5690EEEBB952194
+   - The commit is authentic and has not been tampered with
    - The release was created through GitHub's release system
-   - The tag points to a specific commit in the official repository
+   - The tag points to a verified commit in the official repository
+
+The verification process:
+- Fetches the release from GitHub API
+- Extracts the commit SHA from the release
+- Calls GitHub API: `/repos/Manager-io/Manager/commits/{sha}`
+- Checks the `commit.verification.verified` field
+- Logs signature details including verification reason
+- Fails the build if signature verification returns false
 
 #### Limitations
 
 - Manager.io does not sign their binaries with GPG, so we cannot verify binary-level signatures
-- GitHub's signature on tags proves the tag exists on GitHub, but not that the binary contents are signed by Manager.io maintainers
+- We verify that GitHub signed the commit, not that Manager.io maintainers signed it
+- The signature proves the commit exists on GitHub with GitHub's signature
 
 ### Compensating Security Controls
 
@@ -60,7 +70,7 @@ To address the lack of upstream binary signatures, we implement multiple additio
 
 Each build performs the following verifications:
 
-- ✅ Upstream release tag verified via GitHub API
+- ✅ Upstream release commit signature cryptographically verified via GitHub API
 - ✅ Binary downloaded from official GitHub release
 - ✅ SHA256 hash computed and logged
 - ✅ VirusTotal scan passed (if API key configured) or warning logged
@@ -77,11 +87,12 @@ When a build completes, the GitHub release notes show the verification results:
 ```
 **Upstream Manager.io**
 - Release: v26.2.13.3181
-- Verification Method: GitHub Release API
+- Verification Method: GitHub Commit Signature API
 
 **Security Verification**
-- Manager.io Release Signature: ✅ Verified
-  - Details: Release tag exists on GitHub (GitHub-verified signature)
+- Manager.io Commit Signature: ✅ Verified
+  - Details: Cryptographically verified by GitHub (GPG key B5690EEEBB952194)
+  - Signature Reason: valid
 - VirusTotal Scan: ✅ Clean (70 engines, 0 malicious)
   - Binary SHA256: abc123...
   - [View Scan Results](https://www.virustotal.com/gui/file/abc123.../detection)

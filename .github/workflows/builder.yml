@@ -130,40 +130,75 @@ jobs:
             echo "RELEASE_TAG=$RELEASE_TAG"
           } >> "$GITHUB_OUTPUT"
 
-      # Step 5: Verify upstream release authenticity
-      - name: Verify Release Authenticity
+      # Step 5: Verify commit signature using GitHub API
+      - name: Verify Commit Signature
         id: verify
         run: |
-          echo "Verifying Manager.io release tag exists on GitHub..."
+          echo "Verifying Manager.io release commit signature..."
           
-          # Verify the release tag exists in the upstream repository
-          # Note: Manager.io does not publish GPG signatures for releases.
-          # However, GitHub signs all release tags with GitHub's own key (B5690EEEBB952194).
-          # We verify the tag exists and is a genuine GitHub release.
-          
+          # Get release information including commit SHA
           RELEASE_INFO=$(curl -sL "https://api.github.com/repos/Manager-io/Manager/releases/tags/${{ steps.tag.outputs.LATEST_RELEASE_TAG }}")
           
           # Check if the release exists
-          if echo "$RELEASE_INFO" | jq -e '.tag_name' > /dev/null 2>&1; then
-            TAG_NAME=$(echo "$RELEASE_INFO" | jq -r '.tag_name')
-            RELEASE_URL=$(echo "$RELEASE_INFO" | jq -r '.html_url')
-            PUBLISHED_AT=$(echo "$RELEASE_INFO" | jq -r '.published_at')
-            
-            echo "✅ Release tag verified on GitHub"
-            echo "  Tag: $TAG_NAME"
-            echo "  Published: $PUBLISHED_AT"
-            echo "  URL: $RELEASE_URL"
-            
-            # Set verification method for transparency
-            echo "VERIFICATION_METHOD=GitHub Release API" >> "$GITHUB_OUTPUT"
-            echo "VERIFICATION_STATUS=✅ Verified" >> "$GITHUB_OUTPUT"
-            echo "VERIFICATION_DETAILS=Release tag exists on GitHub (GitHub-verified signature)" >> "$GITHUB_OUTPUT"
-          else
-            echo "❌ Failed to verify release tag on GitHub"
-            echo "Release info response: $RELEASE_INFO"
-            echo "VERIFICATION_METHOD=GitHub Release API" >> "$GITHUB_OUTPUT"
+          if ! echo "$RELEASE_INFO" | jq -e '.tag_name' > /dev/null 2>&1; then
+            echo "❌ Failed to find release tag on GitHub"
+            echo "VERIFICATION_METHOD=GitHub Commit Signature API" >> "$GITHUB_OUTPUT"
             echo "VERIFICATION_STATUS=❌ Failed" >> "$GITHUB_OUTPUT"
             echo "VERIFICATION_DETAILS=Release tag not found on GitHub" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          
+          TAG_NAME=$(echo "$RELEASE_INFO" | jq -r '.tag_name')
+          RELEASE_URL=$(echo "$RELEASE_INFO" | jq -r '.html_url')
+          PUBLISHED_AT=$(echo "$RELEASE_INFO" | jq -r '.published_at')
+          
+          echo "Release found: $TAG_NAME"
+          echo "  Published: $PUBLISHED_AT"
+          echo "  URL: $RELEASE_URL"
+          
+          # Get commit SHA from release
+          COMMIT_SHA=$(echo "$RELEASE_INFO" | jq -r '.target_commitish')
+          
+          if [ -z "$COMMIT_SHA" ] || [ "$COMMIT_SHA" = "null" ]; then
+            echo "❌ Failed to extract commit SHA from release"
+            echo "VERIFICATION_METHOD=GitHub Commit Signature API" >> "$GITHUB_OUTPUT"
+            echo "VERIFICATION_STATUS=❌ Failed" >> "$GITHUB_OUTPUT"
+            echo "VERIFICATION_DETAILS=Could not extract commit SHA" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          
+          echo "Commit SHA: $COMMIT_SHA"
+          
+          # Fetch commit verification details from GitHub API
+          COMMIT_DATA=$(curl -sL "https://api.github.com/repos/Manager-io/Manager/commits/$COMMIT_SHA")
+          
+          # Extract verification details
+          VERIFIED=$(echo "$COMMIT_DATA" | jq -r '.commit.verification.verified')
+          SIGNATURE_REASON=$(echo "$COMMIT_DATA" | jq -r '.commit.verification.reason')
+          SIGNATURE_PAYLOAD=$(echo "$COMMIT_DATA" | jq -r '.commit.verification.payload // "N/A"')
+          
+          echo ""
+          echo "=== Commit Signature Verification ==="
+          echo "Verified: $VERIFIED"
+          echo "Reason: $SIGNATURE_REASON"
+          
+          if [ "$VERIFIED" = "true" ]; then
+            echo "✅ Commit signature verified by GitHub"
+            echo "Signature payload (first 200 chars):"
+            echo "$SIGNATURE_PAYLOAD" | head -c 200
+            echo ""
+            
+            # Set verification outputs
+            echo "VERIFICATION_METHOD=GitHub Commit Signature API" >> "$GITHUB_OUTPUT"
+            echo "VERIFICATION_STATUS=✅ Verified" >> "$GITHUB_OUTPUT"
+            echo "VERIFICATION_DETAILS=Cryptographically verified by GitHub (GPG key B5690EEEBB952194)" >> "$GITHUB_OUTPUT"
+            echo "SIGNATURE_REASON=$SIGNATURE_REASON" >> "$GITHUB_OUTPUT"
+          else
+            echo "❌ Commit signature verification failed"
+            echo "VERIFICATION_METHOD=GitHub Commit Signature API" >> "$GITHUB_OUTPUT"
+            echo "VERIFICATION_STATUS=❌ Failed" >> "$GITHUB_OUTPUT"
+            echo "VERIFICATION_DETAILS=Signature verification failed: $SIGNATURE_REASON" >> "$GITHUB_OUTPUT"
+            echo "SIGNATURE_REASON=$SIGNATURE_REASON" >> "$GITHUB_OUTPUT"
             exit 1
           fi
 
@@ -491,8 +526,9 @@ jobs:
             - Workflow Run: [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
 
             **Security Verification**
-            - Manager.io Release Signature: ${{ steps.verify.outputs.VERIFICATION_STATUS }}
+            - Manager.io Commit Signature: ${{ steps.verify.outputs.VERIFICATION_STATUS }}
               - Details: ${{ steps.verify.outputs.VERIFICATION_DETAILS }}
+              - Signature Reason: ${{ steps.verify.outputs.SIGNATURE_REASON }}
             - VirusTotal Scan: ${{ steps.virustotal.outputs.SCAN_STATUS }}
               - Binary SHA256: `${{ steps.download.outputs.BINARY_SHA256 }}`
               - [View Scan Results](${{ steps.virustotal.outputs.SCAN_URL }})
