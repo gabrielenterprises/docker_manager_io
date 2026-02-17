@@ -187,6 +187,27 @@ docker run --rm -v manager-data:/data -v $(pwd):/backup alpine \
   tar czf /backup/manager-backup.tar.gz -C /data .
 ```
 
+### Understanding GHCR Image Structure
+
+When you view the package in GitHub Container Registry (GHCR), you'll see:
+
+1. **Named Tags** (3 per build):
+   - `latest` - Always points to the newest build (mutable)
+   - `<version>` - Specific version tag (e.g., `26.2.13.3181`)
+   - `<version>-<sha>` - Immutable tag with Git SHA (e.g., `26.2.13.3181-abc123def456`)
+
+2. **Platform-Specific Images**:
+   - Separate images for `linux/amd64` and `linux/arm64`
+   - These are the actual container images for each architecture
+
+3. **"Untagged" Entry (Manifest Index)**:
+   - This is the **manifest list** (or manifest index) that ties together the platform-specific images
+   - It allows Docker to automatically select the correct platform image when you pull
+   - This is **normal and expected** for multi-arch builds - not a mistake or leftover artifact
+   - When you `docker pull` a tag, Docker uses this manifest to download the right platform image
+
+**Why the "untagged" entry?** Multi-arch images require a manifest index that references the platform-specific images. The named tags point to this manifest index, which then points to the actual platform images. This is how Docker knows which image to pull for your architecture.
+
 ## 📊 Reproducible Builds
 
 To reproduce a specific build:
