@@ -4,8 +4,8 @@ on:
 
 # --------------------------------------------------------------
 # Permissions needed:
-#   contents: write   → create/update a GitHub release (ncipollo/release-action)
-#   packages: read    → pull the image manifest from GHCR
+#   contents: write   → create/update a GitHub release (if you later use ncipollo/release-action)
+#   packages: read    → pull image manifests from GHCR
 #   actions: write    → dispatch the Builder workflow
 # --------------------------------------------------------------
 permissions:
@@ -51,7 +51,7 @@ jobs:
           echo "token=$TOKEN" >> $GITHUB_OUTPUT
 
       # --------------------------------------------------------------
-      # 3️⃣ Pull the **manifest list** (OCI index) for the tag (e.g. latest)
+      # 3️⃣ Pull the manifest list (OCI index) for the tag (e.g. latest)
       # --------------------------------------------------------------
       - name: Pull manifest list
         id: manifest_list
@@ -68,7 +68,7 @@ jobs:
             exit 1
           fi
 
-          # Write the JSON as a **multiline** output (required syntax)
+          # Store the raw JSON as a multiline output
           echo "list<<EOF" >> $GITHUB_OUTPUT
           echo "$LIST" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
@@ -77,7 +77,7 @@ jobs:
           IMAGE_TAG: ${{ env.IMAGE_TAG }}
 
       # --------------------------------------------------------------
-      # 4️⃣ Choose an architecture digest (prefer amd64, fallback to first)
+      # 4️⃣ Determine the amd64 (or first) architecture digest
       # --------------------------------------------------------------
       - name: Determine architecture digest
         id: arch_digest
@@ -98,7 +98,7 @@ jobs:
           REPO: ${{ env.REPO }}
 
       # --------------------------------------------------------------
-      # 5️⃣ Pull the **architecture manifest** (contains the config with labels)
+      # 5️⃣ Pull the architecture manifest (contains the config with labels)
       # --------------------------------------------------------------
       - name: Pull architecture manifest
         id: arch_manifest
@@ -108,7 +108,7 @@ jobs:
             -H "Accept: application/vnd.oci.image.manifest.v1+json" \
             "https://ghcr.io/v2/${REPO}/manifests/${{ steps.arch_digest.outputs.digest }}")
 
-          # Write it as a multiline output (same technique as step 3)
+          # Store as multiline output
           echo "manifest<<EOF" >> $GITHUB_OUTPUT
           echo "$MANIFEST" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
