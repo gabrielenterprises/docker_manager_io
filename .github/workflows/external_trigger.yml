@@ -1,5 +1,5 @@
 # --------------------------------------------------------------
-# Version R – External Trigger (Fixed blob fetch with proper headers)
+# Version S – External Trigger (Follow redirects for blob fetch)
 # OCI Image Version Detection and Builder Dispatch
 # --------------------------------------------------------------
 
@@ -49,7 +49,7 @@ jobs:
       - name: Get amd64 manifest digest
         id: arch_digest
         run: |
-          MANIFEST_INDEX=$(curl -sf \
+          MANIFEST_INDEX=$(curl -sfL \
             -H "Authorization: Bearer ${{ steps.ghcr_token.outputs.token }}" \
             -H "Accept: application/vnd.oci.image.index.v1+json" \
             "https://ghcr.io/v2/${REPO}/manifests/${IMAGE_TAG}") || {
@@ -82,7 +82,7 @@ jobs:
       - name: Get architecture manifest
         id: arch_manifest
         run: |
-          MANIFEST=$(curl -sf \
+          MANIFEST=$(curl -sfL \
             -H "Authorization: Bearer ${{ steps.ghcr_token.outputs.token }}" \
             -H "Accept: application/vnd.oci.image.manifest.v1+json" \
             "https://ghcr.io/v2/${REPO}/manifests/${{ steps.arch_digest.outputs.digest }}") || {
@@ -107,24 +107,11 @@ jobs:
           CONFIG_DIGEST="${{ steps.arch_manifest.outputs.config_digest }}"
           TOKEN="${{ steps.ghcr_token.outputs.token }}"
           
-          # Fetch config blob with Accept header for JSON
-          CONFIG=$(curl -sS -w "\n%{http_code}" \
+          # Fetch config blob with -L to follow redirects and Accept header for JSON
+          RESPONSE=$(curl -sfL \
             -H "Authorization: Bearer $TOKEN" \
             -H "Accept: application/vnd.oci.image.config.v1+json" \
             "https://ghcr.io/v2/${REPO}/blobs/${CONFIG_DIGEST}")
-          
-          # Extract HTTP status code (last line)
-          HTTP_CODE=$(echo "$CONFIG" | tail -n1)
-          # Get everything except the last line (the actual response)
-          RESPONSE=$(echo "$CONFIG" | head -n-1)
-          
-          echo "HTTP Status Code: $HTTP_CODE" >> $GITHUB_STEP_SUMMARY
-          
-          if [ "$HTTP_CODE" != "200" ]; then
-            echo "❌ Failed to fetch config blob. HTTP $HTTP_CODE" >> $GITHUB_STEP_SUMMARY
-            echo "Response: $RESPONSE" >> $GITHUB_STEP_SUMMARY
-            exit 1
-          fi
           
           if [ -z "$RESPONSE" ]; then
             echo "❌ Config blob is empty" >> $GITHUB_STEP_SUMMARY
@@ -145,8 +132,11 @@ jobs:
           fi
 
           if [ -z "$IMG_LABEL" ]; then
-            echo "⚠️ Label not found at expected paths. Config structure:" >> $GITHUB_STEP_SUMMARY
-            echo "$RESPONSE" | jq '.' 2>&1 | head -n 50 >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ Label not found at expected paths. Config top-level keys:" >> $GITHUB_STEP_SUMMARY
+            echo "$RESPONSE" | jq 'keys' 2>&1 >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "First 500 chars of config:" >> $GITHUB_STEP_SUMMARY
+            echo "$RESPONSE" | head -c 500 >> $GITHUB_STEP_SUMMARY
             exit 1
           fi
 
