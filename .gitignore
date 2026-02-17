@@ -1,0 +1,6 @@
+# Tools downloaded for validation
+actionlint
+
+# Build artifacts
+*.tar.gz
+*.zip
