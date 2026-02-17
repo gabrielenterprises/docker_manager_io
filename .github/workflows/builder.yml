@@ -13,15 +13,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # --------------------------------------------------------------
-      # 1️⃣ Checkout the repository (Dockerfile + wrapper, etc.)
-      # --------------------------------------------------------------
+      # Step 1: Checkout the repository (Dockerfile + wrapper, etc.)
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # --------------------------------------------------------------
-      # 2️⃣ Log in to GitHub Container Registry (GHCR)
-      # --------------------------------------------------------------
+      # Step 2: Log in to GitHub Container Registry (GHCR)
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -29,9 +25,7 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # --------------------------------------------------------------
-      # 3️⃣ Set up QEMU & Buildx for multi‑arch builds
-      # --------------------------------------------------------------
+      # Step 3: Set up QEMU & Buildx for multi‑arch builds
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -40,9 +34,7 @@ jobs:
         with:
           buildkitd-flags: --debug
 
-      # --------------------------------------------------------------
-      # 4️⃣ Determine the latest upstream Manager.io release tag
-      # --------------------------------------------------------------
+      # Step 4: Determine the latest upstream Manager.io release tag
       - name: Get Latest Release Tag
         id: tag
         run: |
@@ -56,9 +48,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # --------------------------------------------------------------
-      # 5️⃣ Build & push Docker image (immutable tags + mutable latest)
-      # --------------------------------------------------------------
+      # Step 5: Build & push Docker image (immutable tags + mutable latest)
       - name: Build and push Docker image
         id: build
         uses: docker/build-push-action@v6
@@ -72,14 +62,14 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ steps.tag.outputs.RELEASE_TAG }}-${{ github.sha }}
           labels: |
             org.opencontainers.image.title=Manager.io
+            org.opencontainers.image.description=Docker wrapper for Manager.io application
             org.opencontainers.image.source=https://github.com/Manager-io/Manager
             org.opencontainers.image.licenses=GPL-3.0
+            org.opencontainers.image.version=${{ steps.tag.outputs.LATEST_RELEASE_TAG }}
           build-args: |
             MANAGER_VERSION=${{ steps.tag.outputs.LATEST_RELEASE_TAG }}
 
-      # --------------------------------------------------------------
-      # 6️⃣ (Optional) Save the image digest for audit/rollback
-      # --------------------------------------------------------------
+      # Step 6: (Optional) Save the image digest for audit/rollback
       - name: Save image digest
         if: always()
         run: |
@@ -87,14 +77,12 @@ jobs:
 
       - name: Upload digest artifact
         if: always()
-        uses: actions/upload-artifact@v4   # <-- upgraded version
+        uses: actions/upload-artifact@v4
         with:
           name: image-digest
           path: image-digest.txt
 
-      # --------------------------------------------------------------
-      # 7️⃣ Create a GitHub release mirroring the upstream version
-      # --------------------------------------------------------------
+      # Step 7: Create a GitHub release mirroring the upstream version
       - name: Create GitHub Release
         uses: ncipollo/release-action@v1
         with:
@@ -103,9 +91,9 @@ jobs:
           body: |
             Auto‑generated release – Docker image built from upstream Manager.io ${{ steps.tag.outputs.LATEST_RELEASE_TAG }}.
 
-            **Docker image tags:**  
-            - `latest`  
-            - `${{ steps.tag.outputs.RELEASE_TAG }}`  
+            **Docker image tags:**
+            - `latest`
+            - `${{ steps.tag.outputs.RELEASE_TAG }}`
             - `${{ steps.tag.outputs.RELEASE_TAG }}-${{ github.sha }}`
 
             **Docker image:** `ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ steps.tag.outputs.RELEASE_TAG }}`
