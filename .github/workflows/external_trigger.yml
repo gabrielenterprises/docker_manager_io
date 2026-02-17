@@ -1,5 +1,5 @@
 # --------------------------------------------------------------
-# Version F – External Trigger (single‑step manifest fetch, jq fixed)
+# Version G – External Trigger (single‑step manifest fetch, jq fixed)
 # --------------------------------------------------------------
 # This workflow:
 #   1️⃣ Retrieves the latest Manager.io release tag.
@@ -146,12 +146,12 @@ jobs:
       # --------------------------------------------------------------
       - name: Compare versions and possibly trigger Builder
         run: |
-          if [ "${EXT_RELEASE}" = "${IMAGE_VERSION}" ]; then
+          if [ "${EXT_RELEASE}" = "${{ steps.imgver.outputs.image_version }}" ]; then
             echo "✅ Versions match (both = ${EXT_RELEASE}); nothing to do." >> $GITHUB_STEP_SUMMARY
             exit 0
           fi
 
-          echo "🚀 New upstream version **${EXT_RELEASE}** differs from image version **${IMAGE_VERSION}**." >> $GITHUB_STEP_SUMMARY
+          echo "🚀 New upstream version **${EXT_RELEASE}** differs from image version **${{ steps.imgver.outputs.image_version }}**." >> $GITHUB_STEP_SUMMARY
           echo "Dispatching Builder workflow…" >> $GITHUB_STEP_SUMMARY
 
           curl -X POST \
