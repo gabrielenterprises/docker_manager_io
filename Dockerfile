@@ -29,6 +29,7 @@ FROM mcr.microsoft.com/dotnet/runtime-deps:8.0
 
 ARG MANAGER_VERSION
 LABEL build_version="version:- ${MANAGER_VERSION}"
+LABEL org.opencontainers.image.version="${MANAGER_VERSION}"
 
 # Puppeteer needs a headless Chromium binary.
 # The wrapper script (included in the repo) tells Puppeteer where to find it.
