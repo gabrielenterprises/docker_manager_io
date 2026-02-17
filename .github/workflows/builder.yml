@@ -78,15 +78,16 @@ jobs:
             MANAGER_VERSION=${{ steps.tag.outputs.LATEST_RELEASE_TAG }}
 
       # --------------------------------------------------------------
-      # 6️⃣ (Optional) Save the image digest as an artifact for audit/rollback
+      # 6️⃣ (Optional) Save the image digest for audit/rollback
       # --------------------------------------------------------------
       - name: Save image digest
         if: always()
         run: |
           echo "${{ steps.build.outputs.digest }}" > image-digest.txt
+
       - name: Upload digest artifact
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4   # <-- upgraded version
         with:
           name: image-digest
           path: image-digest.txt
@@ -112,4 +113,3 @@ jobs:
           draft: false
           prerelease: false
           allowUpdates: true
-          # No explicit token needed – it will use the GITHUB_TOKEN that now has `contents: write`
