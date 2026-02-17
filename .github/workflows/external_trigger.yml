@@ -2,8 +2,14 @@ name: External Trigger
 on:
   workflow_dispatch:
 
+# --------------------------------------------------------------
+# Permissions needed:
+#   contents: write   → create/update a GitHub release (ncipollo/release-action)
+#   packages: read    → pull the image manifest from GHCR
+#   actions: write    → dispatch the Builder workflow
+# --------------------------------------------------------------
 permissions:
-  contents: read
+  contents: write
   packages: read
   actions: write
 
@@ -11,14 +17,17 @@ jobs:
   external-trigger:
     runs-on: ubuntu-latest
     env:
-      REPO: ${{ github.repository }}
-      IMAGE_TAG: latest
+      REPO: ${{ github.repository }}          # e.g. gabrielenterprises/docker_manager_io
+      IMAGE_TAG: latest                       # tag we inspect on GHCR
     steps:
+      # --------------------------------------------------------------
+      # 1️⃣ Retrieve the latest upstream Manager.io version
+      # --------------------------------------------------------------
       - name: Retrieve External Version
         id: extver
         run: |
           EXT_RELEASE=$(curl -sL https://api.github.com/repos/Manager-io/Manager/releases/latest | jq -r '.tag_name')
-          if [ -z "$EXT_RELEASE" ] || [ "$EXT_RELEASE" == "null" ]; then
+          if [ -z "$EXT_RELEASE" ] || [ "$EXT_RELEASE" = "null" ]; then
             echo "> [!WARNING]" >> $GITHUB_STEP_SUMMARY
             echo "> Can't retrieve external version, exiting." >> $GITHUB_STEP_SUMMARY
             exit 1
@@ -28,6 +37,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # --------------------------------------------------------------
+      # 2️⃣ Get a short‑lived token that can pull from GHCR
+      # --------------------------------------------------------------
       - name: Get GHCR pull token
         id: ghcr_token
         run: |
@@ -38,6 +50,9 @@ jobs:
           fi
           echo "token=$TOKEN" >> $GITHUB_OUTPUT
 
+      # --------------------------------------------------------------
+      # 3️⃣ Pull the **manifest list** (OCI index) for the tag (e.g. latest)
+      # --------------------------------------------------------------
       - name: Pull manifest list
         id: manifest_list
         run: |
@@ -46,12 +61,14 @@ jobs:
             -H "Accept: application/vnd.oci.image.index.v1+json" \
             "https://ghcr.io/v2/${REPO}/manifests/${IMAGE_TAG}")
 
+          # Abort if the response contains an error object
           if echo "$LIST" | jq -e 'has("errors")' >/dev/null; then
             echo "❌ Failed to fetch manifest list for ${IMAGE_TAG}:" >> $GITHUB_STEP_SUMMARY
             echo "$LIST" >> $GITHUB_STEP_SUMMARY
             exit 1
           fi
 
+          # Write the JSON as a **multiline** output (required syntax)
           echo "list<<EOF" >> $GITHUB_OUTPUT
           echo "$LIST" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
@@ -59,6 +76,9 @@ jobs:
           REPO: ${{ env.REPO }}
           IMAGE_TAG: ${{ env.IMAGE_TAG }}
 
+      # --------------------------------------------------------------
+      # 4️⃣ Choose an architecture digest (prefer amd64, fallback to first)
+      # --------------------------------------------------------------
       - name: Determine architecture digest
         id: arch_digest
         run: |
@@ -77,6 +97,9 @@ jobs:
         env:
           REPO: ${{ env.REPO }}
 
+      # --------------------------------------------------------------
+      # 5️⃣ Pull the **architecture manifest** (contains the config with labels)
+      # --------------------------------------------------------------
       - name: Pull architecture manifest
         id: arch_manifest
         run: |
@@ -85,12 +108,16 @@ jobs:
             -H "Accept: application/vnd.oci.image.manifest.v1+json" \
             "https://ghcr.io/v2/${REPO}/manifests/${{ steps.arch_digest.outputs.digest }}")
 
+          # Write it as a multiline output (same technique as step 3)
           echo "manifest<<EOF" >> $GITHUB_OUTPUT
           echo "$MANIFEST" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
         env:
           REPO: ${{ env.REPO }}
 
+      # --------------------------------------------------------------
+      # 6️⃣ Extract the OCI version label from the manifest
+      # --------------------------------------------------------------
       - name: Extract image version label
         id: imgver
         run: |
@@ -109,6 +136,9 @@ jobs:
         env:
           REPO: ${{ env.REPO }}
 
+      # --------------------------------------------------------------
+      # 7️⃣ Compare upstream version vs. image version, trigger Builder if needed
+      # --------------------------------------------------------------
       - name: Compare versions and possibly trigger Builder
         run: |
           if [ "${EXT_RELEASE}" = "${IMAGE_VERSION}" ]; then
