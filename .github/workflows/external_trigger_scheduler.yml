@@ -4,6 +4,10 @@ on:
     - cron: "0 0 * * *"   # daily at 00:00 UTC
   workflow_dispatch:
 
+permissions:
+  contents: read      # read repo files (checkout, raw vars.yml)
+  actions: write      # dispatch other workflows
+
 jobs:
   external-trigger-scheduler:
     runs-on: ubuntu-latest
