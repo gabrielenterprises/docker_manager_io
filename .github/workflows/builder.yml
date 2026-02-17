@@ -4,6 +4,8 @@ on:
     - cron: "0 0 * * *"  # daily at 00:00 UTC
   workflow_dispatch:      # manual trigger
   push:
+    branches:
+      - main
     paths:
       - 'Dockerfile'
       - '.github/dependabot.yml'
@@ -77,9 +79,11 @@ jobs:
   build:
     needs: check-version
     if: |
-      needs.check-version.outputs.should-build == 'true' ||
-      github.event_name == 'push' ||
-      github.event_name == 'workflow_dispatch'
+      needs.check-version.result != 'failure' && (
+        needs.check-version.outputs.should-build == 'true' ||
+        github.event_name == 'push' ||
+        github.event_name == 'workflow_dispatch'
+      )
     runs-on: ubuntu-latest
     steps:
       # Step 1: Capture build timestamp
