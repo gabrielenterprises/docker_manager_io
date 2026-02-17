@@ -1,12 +1,12 @@
 {
   "version": "26.2.13.3181",
   "sanitized_version": "26.2.13.3181",
-  "build_timestamp": "2026-02-17T21:46:36Z",
-  "github_sha": "0529ca14d6be08d625fddf79ebecbaae91893749",
+  "build_timestamp": "2026-02-17T22:46:39Z",
+  "github_sha": "7b0cf7e685340c6faa6d3d00595060cd178733f8",
   "github_ref": "refs/heads/main",
   "github_workflow": "Builder",
-  "github_run_id": "22116796387",
-  "github_run_number": "18",
+  "github_run_id": "22118605166",
+  "github_run_number": "19",
   "binary": {
     "amd64_sha256": "23688dc42db50d0d41597d4b0b84f955b2b2741246ba76f6c0b70d4c51e4e9a6",
     "download_url": "https://github.com/Manager-io/Manager/releases/download/26.2.13.3181/ManagerServer-linux-x64.tar.gz"
@@ -22,11 +22,11 @@
     }
   },
   "docker_image": {
-    "digest": "sha256:fe23b5fa7e192ad0b355865e4062373ae96ed1a9ac2b24e5092fe955d9bf5315",
+    "digest": "sha256:9e48e0427e23beacca34008cb34356fda3e23b850568156179b9fc85bed92073",
     "tags": [
       "ghcr.io/gabrielenterprises/docker_manager_io:latest",
       "ghcr.io/gabrielenterprises/docker_manager_io:26.2.13.3181",
-      "ghcr.io/gabrielenterprises/docker_manager_io:26.2.13.3181-0529ca14d6be08d625fddf79ebecbaae91893749"
+      "ghcr.io/gabrielenterprises/docker_manager_io:26.2.13.3181-7b0cf7e685340c6faa6d3d00595060cd178733f8"
     ],
     "platforms": ["linux/amd64", "linux/arm64"],
     "signed_with_cosign": true
