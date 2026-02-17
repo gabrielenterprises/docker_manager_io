@@ -1,5 +1,5 @@
 # --------------------------------------------------------------
-# Version K – External Trigger
+# Version M – External Trigger (Fixed multiline blob handling)
 # OCI Image Version Detection and Builder Dispatch
 # --------------------------------------------------------------
 # This workflow:
@@ -107,10 +107,11 @@ jobs:
 
           echo "config_digest=$CONFIG_DIGEST" >> $GITHUB_OUTPUT
 
-      # Step 5: Fetch the config blob (contains image labels)
-      - name: Fetch config blob
-        id: config_blob
+      # Step 5: Fetch the config blob and extract version label directly
+      - name: Extract image version label
+        id: imgver
         run: |
+          # Fetch config blob and extract version in one step to avoid multiline output issues
           CONFIG=$(curl -sf \
             -H "Authorization: Bearer ${{ steps.ghcr_token.outputs.token }}" \
             "https://ghcr.io/v2/${REPO}/blobs/${{ steps.arch_manifest.outputs.config_digest }}") || {
@@ -118,25 +119,20 @@ jobs:
             exit 1
           }
 
-          echo "blob<<EOF" >> $GITHUB_OUTPUT
-          echo "$CONFIG" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      # Step 6: Extract image version label from config
-      - name: Extract image version label
-        id: imgver
-        run: |
-          IMG_LABEL=$(echo "${{ steps.config_blob.outputs.blob }}" | jq -r '.config.Labels["org.opencontainers.image.version"] // empty')
+          # Extract the version label directly from the config
+          IMG_LABEL=$(echo "$CONFIG" | jq -r '.config.Labels["org.opencontainers.image.version"]? // empty')
 
           if [ -z "$IMG_LABEL" ]; then
-            echo "⚠️ Could not extract version label from image config." >> $GITHUB_STEP_SUMMARY
+            echo "���️ Version label not found in image config." >> $GITHUB_STEP_SUMMARY
+            echo "Config structure for debugging:" >> $GITHUB_STEP_SUMMARY
+            echo "$CONFIG" | jq '.config.Labels // "No Labels found"' >> $GITHUB_STEP_SUMMARY
             exit 1
           fi
 
           echo "✅ Found image version: $IMG_LABEL" >> $GITHUB_STEP_SUMMARY
           echo "image_version=$IMG_LABEL" >> $GITHUB_OUTPUT
 
-      # Step 7: Compare versions and dispatch Builder if needed
+      # Step 6: Compare versions and dispatch Builder if needed
       - name: Compare versions and trigger Builder
         run: |
           if [ "${EXT_RELEASE}" = "${{ steps.imgver.outputs.image_version }}" ]; then
