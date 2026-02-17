@@ -1,14 +1,14 @@
 # --------------------------------------------------------------
-# Version B – External Trigger workflow (robust manifest fetch)
+# Version C – External Trigger (single‑step manifest fetch)
 # --------------------------------------------------------------
 # This workflow:
 #   1️⃣ Retrieves the latest Manager.io release tag.
-#   2️⃣ Pulls the OCI manifest list for the `latest` tag from GHCR.
-#   3️⃣ Extracts the amd64 (or first) manifest digest.
-#   4️⃣ Pulls that architecture‑specific manifest (contains the config).
-#   5️⃣ Reads the standard OCI label `org.opencontainers.image.version`.
-#   6️⃣ Compares it to the upstream tag and dispatches the Builder
-#      workflow only when the versions differ.
+#   2️⃣ Pulls the OCI manifest list for the `latest` tag from GHCR
+#      **and extracts the amd64 digest in the same command**.
+#   3️⃣ Pulls that architecture‑specific manifest (contains the config).
+#   4️⃣ Reads the OCI label `org.opencontainers.image.version`.
+#   5️⃣ Compares it to the upstream tag and dispatches Builder only
+#      when the versions differ.
 # --------------------------------------------------------------
 
 name: External Trigger
@@ -61,62 +61,45 @@ jobs:
             echo "❌ Failed to obtain GHCR token" >> $GITHUB_STEP_SUMMARY
             exit 1
           fi
-          # Export the token for later steps
-          echo "token=$TOKEN" >> $GITHUB_OUTPUT
+          echo "token=$TOKEN" >> $GITHUB_OUTPUT   # expose for later steps
 
       # --------------------------------------------------------------
-      # 3️⃣ Pull the **manifest list** (OCI index) for the tag (e.g. latest)
+      # 3️⃣ Pull manifest list **and** extract the amd64 digest (single step)
       # --------------------------------------------------------------
-      - name: Pull manifest list
-        id: manifest_list
-        run: |
-          # ‑f makes curl exit with a non‑zero code on HTTP ≥400
-          LIST=$(curl -sf \
-            -H "Authorization: Bearer ${{ steps.ghcr_token.outputs.token }}" \
-            -H "Accept: application/vnd.oci.image.index.v1+json" \
-            "https://ghcr.io/v2/${REPO}/manifests/${IMAGE_TAG}") || {
-            echo "❌ Failed to fetch manifest list – HTTP error (maybe missing tag or bad token)." >> $GITHUB_STEP_SUMMARY
-            exit 1
-          }
-
-          # Verify that the payload looks like JSON (starts with a curly brace)
-          if ! echo "$LIST" | head -c 1 | grep -q '{'; then
-            echo "❌ Unexpected response (not JSON). First bytes:" >> $GITHUB_STEP_SUMMARY
-            echo "$LIST" | head -c 200 >> $GITHUB_STEP_SUMMARY
-            exit 1
-          fi
-
-          # Store the raw JSON as a **multiline** output (required syntax)
-          echo "list<<EOF" >> $GITHUB_OUTPUT
-          echo "$LIST" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-        env:
-          REPO: ${{ env.REPO }}
-          IMAGE_TAG: ${{ env.IMAGE_TAG }}
-
-      # --------------------------------------------------------------
-      # 4️⃣ Determine the amd64 (or first) architecture digest
-      # --------------------------------------------------------------
-      - name: Determine architecture digest
+      - name: Get amd64 manifest digest
         id: arch_digest
         run: |
-          ARCH_DIGEST=$(echo "${{ steps.manifest_list.outputs.list }}" |
+          # `-f` makes curl fail on HTTP >=400, `-s` silences progress
+          ARCH_DIGEST=$(curl -sf \
+            -H "Authorization: Bearer ${{ steps.ghcr_token.outputs.token }}" \
+            -H "Accept: application/vnd.oci.image.index.v1+json" \
+            "https://ghcr.io/v2/${REPO}/manifests/${IMAGE_TAG}" |
             jq -r '
+              # If the response contains an error object, abort early
+              if has("errors") then
+                halt_error(1; "GHCR returned an error object")
+              end
+              # Pick the amd64 digest; if none, fall back to the first manifest
               .manifests[]?
               | select(.platform.architecture == "amd64")
               | .digest
               // .manifests[0].digest
-            ')
+            ') || {
+            echo "❌ Failed to obtain architecture digest (bad token, missing tag, or malformed manifest)." >> $GITHUB_STEP_SUMMARY
+            exit 1
+          }
+
           if [ -z "$ARCH_DIGEST" ]; then
-            echo "❌ Could not determine architecture digest from manifest list" >> $GITHUB_STEP_SUMMARY
+            echo "❌ Architecture digest resolved to empty – something went wrong." >> $GITHUB_STEP_SUMMARY
             exit 1
           fi
+
           echo "digest=$ARCH_DIGEST" >> $GITHUB_OUTPUT
         env:
           REPO: ${{ env.REPO }}
 
       # --------------------------------------------------------------
-      # 5️⃣ Pull the architecture manifest (contains the config with labels)
+      # 4️⃣ Pull the architecture manifest (contains the config with labels)
       # --------------------------------------------------------------
       - name: Pull architecture manifest
         id: arch_manifest
@@ -129,7 +112,7 @@ jobs:
             exit 1
           }
 
-          # Store as multiline output (same technique as step 3)
+          # Store as a multiline output (required syntax)
           echo "manifest<<EOF" >> $GITHUB_OUTPUT
           echo "$MANIFEST" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
@@ -137,7 +120,7 @@ jobs:
           REPO: ${{ env.REPO }}
 
       # --------------------------------------------------------------
-      # 6️⃣ Extract the OCI version label from the manifest
+      # 5️⃣ Extract the OCI version label from the manifest
       # --------------------------------------------------------------
       - name: Extract image version label
         id: imgver
@@ -158,7 +141,7 @@ jobs:
           REPO: ${{ env.REPO }}
 
       # --------------------------------------------------------------
-      # 7️⃣ Compare upstream version vs. image version, trigger Builder if needed
+      # 6️⃣ Compare upstream version vs. image version, trigger Builder if needed
       # --------------------------------------------------------------
       - name: Compare versions and possibly trigger Builder
         run: |
