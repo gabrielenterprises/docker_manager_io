@@ -166,9 +166,22 @@ jobs:
           
           echo "Submitting binary to VirusTotal for scanning..."
           
-          # Upload file to VirusTotal
+          # Step 1: Get upload URL from VirusTotal (supports large files, no size limit)
+          echo "Requesting upload URL from VirusTotal..."
+          UPLOAD_URL=$(curl -s --request GET \
+            --url "https://www.virustotal.com/api/v3/files/upload_url" \
+            --header "x-apikey: $VIRUSTOTAL_API_KEY" | jq -r '.data')
+          
+          if [ -z "$UPLOAD_URL" ] || [ "$UPLOAD_URL" = "null" ]; then
+            echo "❌ Failed to get upload URL from VirusTotal"
+            exit 1
+          fi
+          
+          echo "Upload URL obtained: $UPLOAD_URL"
+          
+          # Step 2: Upload file to the obtained URL
           UPLOAD_RESPONSE=$(curl -s --request POST \
-            --url https://www.virustotal.com/api/v3/files \
+            --url "$UPLOAD_URL" \
             --header "x-apikey: $VIRUSTOTAL_API_KEY" \
             --form "file=@/tmp/manager-server-amd64.tar.gz")
           
