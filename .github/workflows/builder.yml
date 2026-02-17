@@ -1,6 +1,8 @@
 name: Builder
 on:
-  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * *"  # daily at 00:00 UTC
+  workflow_dispatch:      # manual trigger
 
 # --------------------------------------------------------------
 # Explicit permissions for the automatically‑provided GITHUB_TOKEN
@@ -10,7 +12,51 @@ permissions:
   packages: write        # needed to push to GHCR
 
 jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      new-version: ${{ steps.check.outputs.new-version }}
+      should-build: ${{ steps.check.outputs.should-build }}
+      release-tag: ${{ steps.check.outputs.release-tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # fetch all history to get tags
+
+      - name: Check for version change
+        id: check
+        run: |
+          # Get latest upstream Manager.io version
+          LATEST=$(curl -sL https://api.github.com/repos/Manager-io/Manager/releases/latest | jq -r '.tag_name')
+          echo "Latest upstream version: $LATEST"
+          
+          # Get last built version from repo tags
+          LAST_BUILT=$(git describe --tags --abbrev=0 2>/dev/null || echo "none")
+          echo "Last built version: $LAST_BUILT"
+          
+          # Strip characters that are unsafe for Docker tags
+          RELEASE_TAG=$(echo "${LATEST}" | tr -d 'v~,%@+;:/ ')
+          echo "Sanitized release tag: $RELEASE_TAG"
+          
+          # Only build if versions differ
+          if [ "$LATEST" != "$LAST_BUILT" ]; then
+            echo "✅ Version changed from $LAST_BUILT to $LATEST - build required"
+            {
+              echo "should-build=true"
+              echo "new-version=$LATEST"
+              echo "release-tag=$RELEASE_TAG"
+            } >> "$GITHUB_OUTPUT"
+          else
+            echo "ℹ️ Version unchanged ($LATEST) - skipping build"
+            echo "should-build=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   build:
+    needs: check-version
+    if: needs.check-version.outputs.should-build == 'true'
     runs-on: ubuntu-latest
     steps:
       # Step 1: Checkout the repository (Dockerfile + wrapper, etc.)
@@ -34,19 +80,18 @@ jobs:
         with:
           buildkitd-flags: --debug
 
-      # Step 4: Determine the latest upstream Manager.io release tag
-      - name: Get Latest Release Tag
+      # Step 4: Set version variables from check-version job output
+      - name: Set Version Variables
         id: tag
         run: |
-          LATEST_RELEASE_TAG=$(curl -sL https://api.github.com/repos/Manager-io/Manager/releases/latest | jq -r '.tag_name')
+          LATEST_RELEASE_TAG="${{ needs.check-version.outputs.new-version }}"
+          RELEASE_TAG="${{ needs.check-version.outputs.release-tag }}"
           echo "Latest Release Tag: $LATEST_RELEASE_TAG"
-          # Strip characters that are unsafe for Docker tags
-          RELEASE_TAG=$(echo "${LATEST_RELEASE_TAG}" | tr -d 'v~,%@+;:/ ')
           echo "Sanitized Release Tag: $RELEASE_TAG"
-          echo "LATEST_RELEASE_TAG=$LATEST_RELEASE_TAG" >> $GITHUB_OUTPUT
-          echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_OUTPUT
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          {
+            echo "LATEST_RELEASE_TAG=$LATEST_RELEASE_TAG"
+            echo "RELEASE_TAG=$RELEASE_TAG"
+          } >> "$GITHUB_OUTPUT"
 
       # Step 5: Build & push Docker image (immutable tags + mutable latest)
       - name: Build and push Docker image
