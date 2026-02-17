@@ -158,16 +158,27 @@ jobs:
           
           # Fetch commit for this tag directly (tag name works as a ref in the commits API)
           # This avoids issues where target_commitish might be a branch name instead of commit SHA
-          COMMIT_DATA=$(curl -sL "https://api.github.com/repos/Manager-io/Manager/commits/$TAG_NAME")
+          COMMIT_DATA=$(curl -sL -w "\n%{http_code}" "https://api.github.com/repos/Manager-io/Manager/commits/$TAG_NAME")
+          HTTP_CODE=$(echo "$COMMIT_DATA" | tail -n1)
+          COMMIT_DATA=$(echo "$COMMIT_DATA" | sed '$d')
+          
+          # Check if API call was successful
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ Failed to fetch commit from GitHub API (HTTP $HTTP_CODE)"
+            echo "VERIFICATION_METHOD=GitHub Commit Signature API" >> "$GITHUB_OUTPUT"
+            echo "VERIFICATION_STATUS=❌ Failed" >> "$GITHUB_OUTPUT"
+            echo "VERIFICATION_DETAILS=GitHub API error (HTTP $HTTP_CODE)" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
           
           # Extract commit SHA for logging
           COMMIT_SHA=$(echo "$COMMIT_DATA" | jq -r '.sha')
           
           if [ -z "$COMMIT_SHA" ] || [ "$COMMIT_SHA" = "null" ]; then
-            echo "❌ Failed to fetch commit for tag"
+            echo "❌ Failed to parse commit data from GitHub API"
             echo "VERIFICATION_METHOD=GitHub Commit Signature API" >> "$GITHUB_OUTPUT"
             echo "VERIFICATION_STATUS=❌ Failed" >> "$GITHUB_OUTPUT"
-            echo "VERIFICATION_DETAILS=Could not fetch commit for tag" >> "$GITHUB_OUTPUT"
+            echo "VERIFICATION_DETAILS=Invalid API response" >> "$GITHUB_OUTPUT"
             exit 1
           fi
           

@@ -99,7 +99,7 @@ When a build completes, the GitHub release notes show the verification results:
   - Details: 0 malicious detections from 70 security vendors
 ```
 
-**Note**: The signature reason shown above ('valid') is an example. GitHub's verification API may return different values such as 'unsigned', 'valid', 'invalid', 'bad_email', 'unknown_signature_type', 'unknown_key', 'malformed_signature', 'expired_key', 'unverified_email', etc. The build will only pass if the reason indicates a verified signature.
+**Note**: The signature reason shown above ('valid') is an example. GitHub's verification API may return different values such as 'unsigned', 'valid', 'invalid', 'bad_email', 'unknown_signature_type', 'unknown_key', 'malformed_signature', 'expired_key', 'unverified_email', etc. The build passes when `verified=true` in the API response, which indicates GitHub has successfully cryptographically verified the commit signature. If `verified=false`, the build will fail regardless of the reason value.
 
 ### Verifying Built Images
 
