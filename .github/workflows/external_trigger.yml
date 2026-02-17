@@ -38,7 +38,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # --------------------------------------------------------------
-      # 2️⃣ Obtain a short‑lived token that can pull from GHCR
+      # 2️⃣ Get a short‑lived token that can pull from GHCR
       # --------------------------------------------------------------
       - name: Get GHCR pull token
         id: ghcr_token
@@ -49,7 +49,6 @@ jobs:
             exit 1
           fi
           echo "token=$TOKEN" >> $GITHUB_OUTPUT
-        # No extra env needed – the request is unauthenticated
 
       # --------------------------------------------------------------
       # 3️⃣ Pull the **manifest list** (OCI index) for the tag (e.g. latest)
@@ -62,14 +61,14 @@ jobs:
             -H "Accept: application/vnd.oci.image.index.v1+json" \
             "https://ghcr.io/v2/${REPO}/manifests/${IMAGE_TAG}")
 
-          # If the response contains an error object, abort with a helpful message
+          # Abort if the response contains an error object
           if echo "$LIST" | jq -e 'has("errors")' >/dev/null; then
             echo "❌ Failed to fetch manifest list for ${IMAGE_TAG}:" >> $GITHUB_STEP_SUMMARY
             echo "$LIST" >> $GITHUB_STEP_SUMMARY
             exit 1
           fi
 
-          # Write the JSON as a **multiline** output (required syntax!)
+          # Write the JSON as a **multiline** output (required syntax)
           echo "list<<EOF" >> $GITHUB_OUTPUT
           echo "$LIST" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
@@ -109,7 +108,7 @@ jobs:
             -H "Accept: application/vnd.oci.image.manifest.v1+json" \
             "https://ghcr.io/v2/${REPO}/manifests/${{ steps.arch_digest.outputs.digest }}")
 
-          # Write it as a multiline output (same technique as above)
+          # Write it as a multiline output (same technique as step 3)
           echo "manifest<<EOF" >> $GITHUB_OUTPUT
           echo "$MANIFEST" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
@@ -143,20 +142,4 @@ jobs:
       - name: Compare versions and possibly trigger Builder
         run: |
           if [ "${EXT_RELEASE}" = "${IMAGE_VERSION}" ]; then
-            echo "✅ Versions match (both = ${EXT_RELEASE}); nothing to do." >> $GITHUB_STEP_SUMMARY
-            exit 0
-          fi
-
-          echo "🚀 New upstream version **${EXT_RELEASE}** differs from image version **${IMAGE_VERSION}**." >> $GITHUB_STEP_SUMMARY
-          echo "Dispatching Builder workflow…" >> $GITHUB_STEP_SUMMARY
-
-          curl -X POST \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            -d "{\"ref\":\"refs/heads/${{ github.ref_name }}\"}" \
-            "https://api.github.com/repos/${REPO}/actions/workflows/builder.yml/dispatches"
-        env:
-          EXT_RELEASE: ${{ env.EXT_RELEASE }}
-          IMAGE_VERSION: ${{ steps.imgver.outputs.image_version }}
-          REPO: ${{ env.REPO }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            echo "✅ Versions
