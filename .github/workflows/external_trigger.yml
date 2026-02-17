@@ -2,18 +2,23 @@ name: External Trigger
 on:
   workflow_dispatch:
 
+# --------------------------------------------------------------
+# Permissions needed:
+#   - contents: read   → fetch the upstream Manager.io release via the GitHub API
+#   - packages: read   → pull the image manifest from GHCR
+#   - actions: write   → dispatch the Builder workflow
+# --------------------------------------------------------------
 permissions:
   contents: read
-  packages: read   # we only need to read the image manifest
-  # write permission is not needed because this workflow only *dispatches* Builder
+  packages: read
+  actions: write
 
 jobs:
   external-trigger:
     runs-on: ubuntu-latest
     env:
-      REPO: ${{ github.repository }}
-      IMAGE_TAG: latest
-
+      REPO: ${{ github.repository }}                # e.g. gabrielenterprises/docker_manager_io
+      IMAGE_TAG: latest                             # tag we inspect on GHCR
     steps:
       # --------------------------------------------------------------
       # 1️⃣ Retrieve the latest upstream Manager.io version
@@ -24,7 +29,7 @@ jobs:
           EXT_RELEASE=$(curl -sL https://api.github.com/repos/Manager-io/Manager/releases/latest | jq -r '.tag_name')
           if [ -z "$EXT_RELEASE" ] || [ "$EXT_RELEASE" = "null" ]; then
             echo "> [!WARNING]" >> $GITHUB_STEP_SUMMARY
-            echo "> Unable to fetch upstream version." >> $GITHUB_STEP_SUMMARY
+            echo "> Can't retrieve external version, exiting." >> $GITHUB_STEP_SUMMARY
             exit 1
           fi
           echo "External version: $EXT_RELEASE" >> $GITHUB_STEP_SUMMARY
@@ -33,68 +38,118 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # --------------------------------------------------------------
-      # 2️⃣ Resolve the digest of the currently published GHCR image
+      # 2️⃣ Obtain a token that can pull from GHCR
       # --------------------------------------------------------------
-      - name: Resolve GHCR image digest
-        id: digest
+      - name: Get GHCR pull token
+        id: ghcr_token
         run: |
-          token=$(curl -s "https://ghcr.io/token?scope=repository:${REPO}:pull" | jq -r '.token')
-          manifest=$(curl -s \
+          TOKEN=$(curl -s "https://ghcr.io/token?scope=repository:${REPO}:pull" | jq -r '.token')
+          if [ -z "$TOKEN" ]; then
+            echo "❌ Failed to obtain GHCR token" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+          echo "token=$TOKEN" >> $GITHUB_OUTPUT
+        # No extra env needed – the request is unauthenticated
+
+      # --------------------------------------------------------------
+      # 3️⃣ Pull the manifest **list** for the tag (e.g. latest)
+      # --------------------------------------------------------------
+      - name: Pull manifest list
+        id: manifest_list
+        run: |
+          LIST=$(curl -s \
+            -H "Authorization: Bearer ${{ steps.ghcr_token.outputs.token }}" \
             -H "Accept: application/vnd.oci.image.index.v1+json" \
-            -H "Authorization: Bearer ${token}" \
             "https://ghcr.io/v2/${REPO}/manifests/${IMAGE_TAG}")
 
-          # Multi‑arch manifests contain a `manifests` array; pick the amd64 entry
-          if jq -e '.manifests' <<< "$manifest" > /dev/null; then
-            digest=$(echo "$manifest" | jq -r '.manifests[] | select(.platform.architecture=="amd64") .digest')
-          else
-            digest=$(echo "$manifest" | jq -r '.config.digest')
+          # Bail out if the response contains an error object
+          if echo "$LIST" | jq -e 'has("errors")' >/dev/null; then
+            echo "❌ Failed to fetch manifest list for ${IMAGE_TAG}:" >> $GITHUB_STEP_SUMMARY
+            echo "$LIST" >> $GITHUB_STEP_SUMMARY
+            exit 1
           fi
 
-          echo "digest=${digest}" >> $GITHUB_OUTPUT
+          echo "list=$LIST" >> $GITHUB_OUTPUT
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ env.REPO }}
+          IMAGE_TAG: ${{ env.IMAGE_TAG }}
 
       # --------------------------------------------------------------
-      # 3️⃣ Pull the image config and read the version label we set in Builder
+      # 4️⃣ Choose an architecture digest (prefer amd64, fallback to first)
       # --------------------------------------------------------------
-      - name: Read image version label
+      - name: Determine architecture digest
+        id: arch_digest
+        run: |
+          ARCH_DIGEST=$(echo "${{ steps.manifest_list.outputs.list }}" |
+            jq -r '
+              .manifests[]?
+              | select(.platform.architecture == "amd64")
+              | .digest
+              // .manifests[0].digest
+            ')
+          if [ -z "$ARCH_DIGEST" ]; then
+            echo "❌ Could not determine architecture digest from manifest list" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+          echo "digest=$ARCH_DIGEST" >> $GITHUB_OUTPUT
+        env:
+          REPO: ${{ env.REPO }}
+
+      # --------------------------------------------------------------
+      # 5️⃣ Pull the **architecture manifest** (this contains the config)
+      # --------------------------------------------------------------
+      - name: Pull architecture manifest
+        id: arch_manifest
+        run: |
+          MANIFEST=$(curl -s \
+            -H "Authorization: Bearer ${{ steps.ghcr_token.outputs.token }}" \
+            -H "Accept: application/vnd.oci.image.manifest.v1+json" \
+            "https://ghcr.io/v2/${REPO}/manifests/${{ steps.arch_digest.outputs.digest }}")
+          echo "manifest=$MANIFEST" >> $GITHUB_OUTPUT
+        env:
+          REPO: ${{ env.REPO }}
+
+      # --------------------------------------------------------------
+      # 6️⃣ Extract the OCI version label from the manifest
+      # --------------------------------------------------------------
+      - name: Extract image version label
         id: imgver
         run: |
-          token=$(curl -s "https://ghcr.io/token?scope=repository:${REPO}:pull" | jq -r '.token')
-          config=$(curl -s \
-            -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \
-            -H "Authorization: Bearer ${token}" \
-            "https://ghcr.io/v2/${REPO}/blobs/${{ steps.digest.outputs.digest }}")
-
-          # The label is stored under `org.opencontainers.image.version`
-          IMG_LABEL=$(echo "$config" | jq -r '.container_config.Labels["org.opencontainers.image.version"] // .config.Labels["org.opencontainers.image.version"] // empty')
+          IMG_LABEL=$(echo "${{ steps.arch_manifest.outputs.manifest }}" |
+            jq -r '
+              .container_config.Labels["org.opencontainers.image.version"] //
+              .config.Labels["org.opencontainers.image.version"] //
+              empty
+            ')
           if [ -z "$IMG_LABEL" ]; then
             echo "⚠️ Could not read version label from the image." >> $GITHUB_STEP_SUMMARY
             exit 1
           fi
+          echo "✅ Found image version label: $IMG_LABEL"
           echo "image_version=$IMG_LABEL" >> $GITHUB_OUTPUT
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ env.REPO }}
 
       # --------------------------------------------------------------
-      # 4️⃣ Compare versions and, if they differ, dispatch Builder
+      # 7️⃣ Compare upstream version vs. image version, trigger Builder if needed
       # --------------------------------------------------------------
-      - name: Compare and possibly trigger Builder
+      - name: Compare versions and possibly trigger Builder
         run: |
           if [ "${EXT_RELEASE}" = "${IMAGE_VERSION}" ]; then
-            echo "✅ Up‑to‑date: ${EXT_RELEASE} already published." >> $GITHUB_STEP_SUMMARY
+            echo "✅ Versions match (both = ${EXT_RELEASE}); nothing to do." >> $GITHUB_STEP_SUMMARY
             exit 0
           fi
 
-          echo "🚀 New upstream version ${EXT_RELEASE} (current image: ${IMAGE_VERSION}) – triggering Builder." >> $GITHUB_STEP_SUMMARY
+          echo "🚀 New upstream version **${EXT_RELEASE}** differs from image version **${IMAGE_VERSION}**." >> $GITHUB_STEP_SUMMARY
+          echo "Dispatching Builder workflow…" >> $GITHUB_STEP_SUMMARY
 
           curl -X POST \
             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
-            -d "{\"ref\":\"refs/heads/main\"}" \
+            -d "{\"ref\":\"refs/heads/${{ github.ref_name }}\"}" \
             "https://api.github.com/repos/${REPO}/actions/workflows/builder.yml/dispatches"
         env:
           EXT_RELEASE: ${{ env.EXT_RELEASE }}
           IMAGE_VERSION: ${{ steps.imgver.outputs.image_version }}
+          REPO: ${{ env.REPO }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
