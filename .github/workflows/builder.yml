@@ -46,29 +46,31 @@ jobs:
           
           echo "Latest upstream version: $LATEST"
           
-          # Get last built version from repo tags
+          # Strip characters that are unsafe for Docker tags
+          RELEASE_TAG=$(echo "${LATEST}" | tr -d 'v~,%@+;:/ ')
+          echo "Sanitized release tag: $RELEASE_TAG"
+          
+          # Always output version information (even if no version change)
+          {
+            echo "new-version=$LATEST"
+            echo "release-tag=$RELEASE_TAG"
+          } >> "$GITHUB_OUTPUT"
+          
+          # Get last built version from repo tags for comparison
           LAST_BUILT=$(git tag --sort=-version:refname | head -n1)
           if [ -z "$LAST_BUILT" ]; then
             LAST_BUILT="none"
           fi
           echo "Last built version: $LAST_BUILT"
           
-          # Strip characters that are unsafe for Docker tags
-          RELEASE_TAG=$(echo "${LATEST}" | tr -d 'v~,%@+;:/ ')
-          echo "Sanitized release tag: $RELEASE_TAG"
-          
           # Normalize versions by removing 'v' prefix for comparison
           LATEST_NORMALIZED=$(echo "${LATEST}" | sed 's/^v//')
           LAST_BUILT_NORMALIZED=$(echo "${LAST_BUILT}" | sed 's/^v//')
           
-          # Only build if versions differ
+          # Only set should-build flag based on version comparison
           if [ "$LATEST_NORMALIZED" != "$LAST_BUILT_NORMALIZED" ]; then
             echo "✅ Version changed from $LAST_BUILT to $LATEST - build required"
-            {
-              echo "should-build=true"
-              echo "new-version=$LATEST"
-              echo "release-tag=$RELEASE_TAG"
-            } >> "$GITHUB_OUTPUT"
+            echo "should-build=true" >> "$GITHUB_OUTPUT"
           else
             echo "ℹ️ Version unchanged ($LATEST) - skipping build"
             echo "should-build=false" >> "$GITHUB_OUTPUT"
