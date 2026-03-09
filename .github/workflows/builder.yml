@@ -376,7 +376,7 @@ jobs:
       #    builds - it allows Docker to automatically select the correct platform image.
       - name: Build and push Docker image
         id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64,linux/arm64
