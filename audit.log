@@ -155,3 +155,14 @@ Cosign Signed: Yes
 Manifest: build-manifest-26.3.26.3225.json
 ========================================
 
+========================================
+Build Date: 2026-03-28 02:18:11 UTC
+Version: 26.3.28.3250
+GitHub SHA: 424575166310ee9c42f5aa315290f3b7c80c5f0e
+Run ID: 23675194323
+Binary SHA256: 9d2249be3d9f5ca9fdf7e93f56a04f2e9d7c53b30db4f73c0d6f344541fe2b6e
+Image Digest: sha256:ecd3f405f92430505ae47ec2d0050edce79e15cafbcfdbed494d23bf19098a99
+Cosign Signed: Yes
+Manifest: build-manifest-26.3.28.3250.json
+========================================
+
