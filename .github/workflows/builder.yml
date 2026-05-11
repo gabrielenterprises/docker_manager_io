@@ -396,7 +396,7 @@ jobs:
 
       # Step 10: Install Cosign for image signing
       - name: Install Cosign
-        uses: sigstore/cosign-installer@v4.1.1
+        uses: sigstore/cosign-installer@v4.1.2
 
       # Step 11: Sign the Docker image with Cosign (keyless)
       - name: Sign Docker Image with Cosign
