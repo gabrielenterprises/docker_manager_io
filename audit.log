@@ -584,3 +584,14 @@ Cosign Signed: Yes
 Manifest: build-manifest-26.5.29.3635.json
 ========================================
 
+========================================
+Build Date: 2026-06-07 04:04:36 UTC
+Version: 26.6.7.3637
+GitHub SHA: e4fe7de4d2fda69f63bbab94322fb0941e72e5e7
+Run ID: 27082092347
+Binary SHA256: 5c87c8758f48b0fed42bcde29b502da1ad3b9e8d4cbb9cb13b9cc2356e430f6f
+Image Digest: sha256:6c30347a0271ba0a4b772475736d91cbbc0d902dc46a4776c84f2fd3e361ab9d
+Cosign Signed: Yes
+Manifest: build-manifest-26.6.7.3637.json
+========================================
+
