@@ -2,7 +2,7 @@
 # Stage 1 – download the upstream ManagerServer tarball
 # --------------------------------------------------------------
 # Pin alpine by digest for reproducibility (digest updated: 2026-02-17)
-FROM alpine@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11 AS build
+FROM alpine@sha256:a2d49ea686c2adfe3c992e47dc3b5e7fa6e6b5055609400dc2acaeb241c829f4 AS build
 
 ARG MANAGER_VERSION               # supplied by the CI (e.g. v5.1.2)
 ARG TARGETPLATFORM                # supplied automatically by Docker Buildx
