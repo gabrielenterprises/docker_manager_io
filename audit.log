@@ -628,3 +628,14 @@ Cosign Signed: Yes
 Manifest: build-manifest-26.6.13.3642.json
 ========================================
 
+========================================
+Build Date: 2026-06-15 18:42:02 UTC
+Version: 26.6.13.3642
+GitHub SHA: f7d5833d753acff0385c89650a772712e4a07111
+Run ID: 27567761730
+Binary SHA256: d53082df88c6f527cd2543b4b35ddf11205cbc342ea0a16e2900e28491359873
+Image Digest: sha256:7cdcd70a79fb4f64b4f1a44482bb218016555553fc8da5de245c5a83fd1cbaf5
+Cosign Signed: Yes
+Manifest: build-manifest-26.6.13.3642.json
+========================================
+
