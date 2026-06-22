@@ -28,7 +28,7 @@ jobs:
       release-tag: ${{ steps.check.outputs.release-tag }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.3
+        uses: actions/checkout@v7.0.0
         with:
           fetch-depth: 0  # fetch all history to get tags
 
@@ -98,7 +98,7 @@ jobs:
 
       # Step 2: Checkout the repository (Dockerfile + wrapper, etc.)
       - name: Checkout Code
-        uses: actions/checkout@v6.0.3
+        uses: actions/checkout@v7.0.0
 
       # Step 2: Log in to GitHub Container Registry (GHCR)
       - name: Login to GitHub Container Registry
