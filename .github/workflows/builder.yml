@@ -505,7 +505,8 @@ jobs:
             git commit -m "Add build manifest and audit log for ${{ steps.tag.outputs.LATEST_RELEASE_TAG }}"
             TARGET_BRANCH="${GITHUB_REF_NAME}"
             MAX_ATTEMPTS=3
-            for ((attempt=1; attempt<=MAX_ATTEMPTS; attempt++)); do
+            attempt=1
+            while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
               if git push origin "HEAD:${TARGET_BRANCH}"; then
                 break
               fi
@@ -516,10 +517,11 @@ jobs:
               echo "Push rejected (attempt $attempt), pulling latest ${TARGET_BRANCH} with rebase and retrying..."
               if ! git pull --rebase origin "$TARGET_BRANCH"; then
                 echo "Pull --rebase failed, attempting to abort rebase state..."
-                git rebase --abort || echo "Failed to abort rebase state (possibly no active rebase)"
-                echo "❌ Pull --rebase failed while retrying artifact push"
+                git rebase --abort || echo "Failed to abort rebase state (possibly no active rebase). Check repository state and retry the workflow."
+                echo "❌ Pull --rebase failed while retrying artifact push. This can happen when concurrent changes conflict; rerun the workflow after resolving conflicts on ${TARGET_BRANCH}."
                 exit 1
               fi
+              attempt=$((attempt + 1))
             done
             echo "✅ Build manifest and audit log committed to repository"
           fi
