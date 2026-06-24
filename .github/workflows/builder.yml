@@ -503,7 +503,7 @@ jobs:
             echo "No changes to commit"
           else
             git commit -m "Add build manifest and audit log for ${{ steps.tag.outputs.LATEST_RELEASE_TAG }}"
-            TARGET_BRANCH="${GITHUB_REF_NAME}"
+            TARGET_BRANCH="${{ github.event.repository.default_branch }}"
             MAX_ATTEMPTS=3
             pushed=false
             attempt=1
@@ -518,7 +518,7 @@ jobs:
                   echo "Pull --rebase failed, attempting to abort rebase state..."
                   git rebase --abort || echo "Failed to abort rebase state (possibly no active rebase). Check repository state and retry the workflow."
                   echo "❌ Pull --rebase failed while retrying artifact push."
-                  echo "This often means concurrent changes conflict. Review this job's logs for conflict details and resolve conflicts on ${TARGET_BRANCH}. Manual intervention may be required before the next run."
+                  echo "This workflow run will now fail. Review this job's logs for conflict details, resolve conflicts on ${TARGET_BRANCH}, then trigger a new run."
                   exit 1
                 fi
               fi
@@ -526,6 +526,7 @@ jobs:
             done
             if [ "$pushed" != "true" ]; then
               echo "❌ Failed to push build artifacts after $MAX_ATTEMPTS attempts"
+              echo "Check recent commits on ${TARGET_BRANCH}, verify workflow write permissions, and rerun when the branch is stable."
               exit 1
             fi
             echo "✅ Build manifest and audit log committed to repository"
