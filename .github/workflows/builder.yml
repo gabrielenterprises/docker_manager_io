@@ -503,19 +503,19 @@ jobs:
             echo "No changes to commit"
           else
             git commit -m "Add build manifest and audit log for ${{ steps.tag.outputs.LATEST_RELEASE_TAG }}"
-            for attempt in 1 2 3; do
+            MAX_ATTEMPTS=3
+            for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
               if git push origin HEAD:main; then
                 break
               fi
-              if [ "$attempt" -eq 3 ]; then
-                echo "❌ Failed to push build artifacts after 3 attempts"
+              if [ "$attempt" -eq "$MAX_ATTEMPTS" ]; then
+                echo "❌ Failed to push build artifacts after $MAX_ATTEMPTS attempts"
                 exit 1
               fi
-              echo "Push rejected (attempt $attempt), rebasing onto latest main and retrying..."
-              git fetch origin main
-              if ! git rebase origin/main; then
+              echo "Push rejected (attempt $attempt), pulling latest main with rebase and retrying..."
+              if ! git pull --rebase origin main; then
                 git rebase --abort || true
-                echo "❌ Rebase failed while retrying artifact push"
+                echo "❌ Pull --rebase failed while retrying artifact push"
                 exit 1
               fi
             done
