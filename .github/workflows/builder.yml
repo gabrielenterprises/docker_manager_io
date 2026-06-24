@@ -503,7 +503,18 @@ jobs:
             echo "No changes to commit"
           else
             git commit -m "Add build manifest and audit log for ${{ steps.tag.outputs.LATEST_RELEASE_TAG }}"
-            git push
+            for attempt in 1 2 3; do
+              if git push origin HEAD:main; then
+                break
+              fi
+              if [ "$attempt" -eq 3 ]; then
+                echo "❌ Failed to push build artifacts after 3 attempts"
+                exit 1
+              fi
+              echo "Push rejected (attempt $attempt), rebasing onto latest main and retrying..."
+              git fetch origin main
+              git rebase origin/main
+            done
             echo "✅ Build manifest and audit log committed to repository"
           fi
 
