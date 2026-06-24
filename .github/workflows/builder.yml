@@ -513,7 +513,11 @@ jobs:
               fi
               echo "Push rejected (attempt $attempt), rebasing onto latest main and retrying..."
               git fetch origin main
-              git rebase origin/main
+              if ! git rebase origin/main; then
+                git rebase --abort || true
+                echo "❌ Rebase failed while retrying artifact push"
+                exit 1
+              fi
             done
             echo "✅ Build manifest and audit log committed to repository"
           fi
