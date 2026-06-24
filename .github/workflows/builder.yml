@@ -518,7 +518,8 @@ jobs:
               if ! git pull --rebase origin "$TARGET_BRANCH"; then
                 echo "Pull --rebase failed, attempting to abort rebase state..."
                 git rebase --abort || echo "Failed to abort rebase state (possibly no active rebase). Check repository state and retry the workflow."
-                echo "❌ Pull --rebase failed while retrying artifact push. This can happen when concurrent changes conflict; rerun the workflow after resolving conflicts on ${TARGET_BRANCH}."
+                echo "❌ Pull --rebase failed while retrying artifact push."
+                echo "This often means concurrent changes conflict. Review this job's logs for conflict details, resolve conflicts on ${TARGET_BRANCH}, then rerun the workflow."
                 exit 1
               fi
               attempt=$((attempt + 1))
