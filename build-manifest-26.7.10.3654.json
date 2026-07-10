@@ -1,0 +1,37 @@
+{
+  "version": "26.7.10.3654",
+  "sanitized_version": "26.7.10.3654",
+  "build_timestamp": "2026-07-10T03:25:35Z",
+  "github_sha": "611bc5aaff8bfbc5312a9bce9905b45d2396ec83",
+  "github_ref": "refs/heads/main",
+  "github_workflow": "Builder",
+  "github_run_id": "29066641904",
+  "github_run_number": "184",
+  "binary": {
+    "amd64_sha256": "81aa7a5d86e9055c67986af32119cf339b89571a855314d8b62f7267248b7e4a",
+    "download_url": "https://github.com/Manager-io/Manager/releases/download/26.7.10.3654/ManagerServer-linux-x64.tar.gz"
+  },
+  "base_images": {
+    "alpine": {
+      "digest": "sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659",
+      "reference": "alpine@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659"
+    },
+    "dotnet_runtime_deps": {
+      "digest": "sha256:d9c7a38d050c9bb90cf5453e8a8217a7eb9df77db3cf8100f4f84d1fb57b5124",
+      "reference": "mcr.microsoft.com/dotnet/runtime-deps@sha256:d9c7a38d050c9bb90cf5453e8a8217a7eb9df77db3cf8100f4f84d1fb57b5124"
+    }
+  },
+  "docker_image": {
+    "digest": "sha256:5d168d9dea60a1c571dfd48567fdb5a6201e72552fb2d101253194e8f267b8cc",
+    "tags": [
+      "ghcr.io/gabrielenterprises/docker_manager_io:latest",
+      "ghcr.io/gabrielenterprises/docker_manager_io:26.7.10.3654",
+      "ghcr.io/gabrielenterprises/docker_manager_io:26.7.10.3654-611bc5aaff8bfbc5312a9bce9905b45d2396ec83"
+    ],
+    "platforms": ["linux/amd64", "linux/arm64"],
+    "signed_with_cosign": true
+  },
+  "reproducibility": {
+    "instructions": "To reproduce this build, use the exact base image digests and Manager.io version specified above."
+  }
+}
