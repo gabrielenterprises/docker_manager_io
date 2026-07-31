@@ -716,3 +716,14 @@ Cosign Signed: Yes
 Manifest: build-manifest-26.7.23.3657.json
 ========================================
 
+========================================
+Build Date: 2026-07-31 19:25:57 UTC
+Version: 26.7.23.3657
+GitHub SHA: 217a713dfc0a100336a80bf705f07e5328166cd8
+Run ID: 30658709436
+Binary SHA256: ec4d990cea132c37cd831f66e2c5d42d9312f78db5624faa04d3e131d36a9c7b
+Image Digest: sha256:608b94f98a5550dfe75fc64fc51ddcb775ba2e31ef98fbd653c19fc77a19d35e
+Cosign Signed: Yes
+Manifest: build-manifest-26.7.23.3657.json
+========================================
+
