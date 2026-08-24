@@ -33,7 +33,7 @@ RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; then \
 # Stage 2 – final runtime image (dotnet runtime‑deps + Chromium)
 # --------------------------------------------------------------
 # Pin .NET runtime-deps by digest for reproducibility (digest updated: 2026-02-17)
-FROM mcr.microsoft.com/dotnet/runtime-deps@sha256:894098eafc82e5fa02ba9f2b71d426dc78252876b9e914caae77ed95cfce185a
+FROM mcr.microsoft.com/dotnet/runtime-deps@sha256:9b37bbaf06fc653cb0e757215081139fb493658e1f864a738f6a478620c9196f
 
 ARG MANAGER_VERSION
 LABEL build_version="version:- ${MANAGER_VERSION}"
